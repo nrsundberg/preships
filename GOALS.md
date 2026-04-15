@@ -1,10 +1,14 @@
-# vibe-checker
+# Preships
+
+**preships.io** · `npm install -g preships`
 
 ## What It Is
 
 A standalone, agent-agnostic QA tool that watches your web application and tests it like a human would — clicking through flows, checking visual quality, monitoring performance, and reporting issues back to whatever coding agent (or human) is building it.
 
 It works as a CLI daemon that pairs with any AI coding agent (Cursor, Claude Code, Codex, or anything else) and closes the feedback loop that's currently broken: coding agents can build UI but can't see or test it.
+
+Pre-ship checks. Before you ship.
 
 ---
 
@@ -19,16 +23,16 @@ It works as a CLI daemon that pairs with any AI coding agent (Cursor, Claude Cod
 ### Design Principles
 - **The CLI is the product.** The cloud is optional convenience and monetization.
 - **Deterministic checks first.** DOM inspection, computed styles, Lighthouse, console errors, and network timing are free, fast, and reliable. LLM-based reasoning is the escalation path, not the default.
-- **One command to start.** `qaagent init` should get someone from zero to a working QA agent in under 5 minutes, including installing local model dependencies if needed.
-- **Agent-agnostic by design.** Communicate via files and git, not proprietary APIs. Any agent that can read a file can work with vibe-checker.
+- **One command to start.** `preships init` should get someone from zero to a working QA agent in under 5 minutes, including installing local model dependencies if needed.
+- **Agent-agnostic by design.** Communicate via files and git, not proprietary APIs. Any agent that can read a file can work with Preships.
 - **Open source CLI, managed cloud.** The CLI is MIT/Apache 2 licensed. The cloud service and admin app are the business.
 
 ---
 
 ## High-Level Deliverables
 
-### 1. CLI / npm Package (`vibe-checker`)
-- Published to npm, installable via `npm install -g vibe-checker`
+### 1. CLI / npm Package (`preships`)
+- Published to npm, installable via `npm install -g preships`
 - Commands: `init`, `watch`, `run`, `report`, `config`, `login`, `status`
 - Shell completions for zsh, bash, fish
 - Guided first-run setup:
@@ -42,9 +46,9 @@ It works as a CLI daemon that pairs with any AI coding agent (Cursor, Claude Cod
 - Tiered model routing with auto-escalation (local → cheap hosted → powerful hosted)
 - Git-based trigger: watch for commits, diff to determine what changed, run relevant checks
 - SQLite for run history, learned patterns, token usage tracking
-- File-based reporting (.qaagent/report.md) for agent consumption
-- Per-repo config via .qaagent/ directory with plan docs, status, and reports
-- Multi-repo support from a single daemon via ~/.vibe-checker/state.db
+- File-based reporting (.preships/report.md) for agent consumption
+- Per-repo config via .preships/ directory with plan docs, status, and reports
+- Multi-repo support from a single daemon via ~/.preships/state.db
 - User feedback collection: ratings every ~100 interactions, error report submission on failures
 
 ### 2. Cloud API / Backend
@@ -119,7 +123,7 @@ It works as a CLI daemon that pairs with any AI coding agent (Cursor, Claude Cod
 ## Future / Stretch Goals
 - Visual diff between runs ("the button moved 12px left since last commit")
 - Design system enforcement (import a Figma/token file, check every page against it)
-- CI/CD integration (run vibe-checker as a GitHub Action on PRs)
+- CI/CD integration (run preships as a GitHub Action on PRs)
 - Cross-repo pattern learning ("this team always forgets loading states on modals")
 - Browser extension for manual QA sessions that feeds back into the learning database
 - Plugin marketplace for community-contributed check types
