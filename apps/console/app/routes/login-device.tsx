@@ -1,10 +1,6 @@
 import { Form, Link, useActionData, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
-import { getConsoleAuthDbFromContext } from "~/lib/db.server";
-import { approveDeviceSession } from "~/lib/device-auth.server";
-import { requireConsoleSession } from "~/lib/route-auth.server";
-
 type LoaderData = {
   code: string;
 };
@@ -23,6 +19,7 @@ export const meta: MetaFunction = () => [
 ];
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const { requireConsoleSession } = await import("~/lib/route-auth.server");
   await requireConsoleSession(request);
   const url = new URL(request.url);
   const code = (url.searchParams.get("code") ?? "").trim();
@@ -31,7 +28,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
-  await requireConsoleSession(request);
+  const { getConsoleAuthDbFromContext } = await import("~/lib/db.server");
+  const { approveDeviceSession } = await import("~/lib/device-auth.server");
+  const { requireConsoleOrgContext } = await import("~/lib/route-auth.server");
+  const requestedOrgId = new URL(request.url).searchParams.get("org");
+  const { session, orgContext } = await requireConsoleOrgContext({
+    request,
+    context,
+    requestedOrgId,
+  });
 
   const formData = await request.formData();
   const code = `${formData.get("code") ?? ""}`.trim();
@@ -53,6 +58,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const result = await approveDeviceSession(
     authDb as Parameters<typeof approveDeviceSession>[0],
     code,
+    {
+      organizationId: orgContext.org.id,
+      userId: session.user.id,
+    },
   );
 
   if (result === "approved") {

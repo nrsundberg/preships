@@ -2,10 +2,11 @@ import { performance } from "node:perf_hooks";
 
 import chalk from "chalk";
 
-import { getRepoConfig } from "../config.js";
+import { getGlobalConfig, getRepoConfig } from "../config.js";
 import { runDeterministicChecks } from "../checks.js";
+import { buildUsageIngestPayloads, ingestUsageEvent } from "../cloud/usage-ingest.js";
 import { writeReport } from "../reporter.js";
-import { Storage } from "../storage.js";
+import { Storage, type TokenUsage } from "../storage.js";
 import type { CheckResult, RunSummary } from "../types.js";
 
 export interface RunOptions {
@@ -13,9 +14,103 @@ export interface RunOptions {
   checkTypes?: string[];
 }
 
+interface CheckUsageMetric {
+  modelId?: string;
+  tokenCount: number;
+  costCents: number;
+  source?: string;
+  timestamp?: string;
+}
+
+function toNonNegativeInt(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+  return Math.max(0, Math.round(n));
+}
+
+function parseCheckUsageMetric(check: CheckResult): CheckUsageMetric {
+  const details = check.details;
+  if (!details || typeof details !== "object") {
+    return { tokenCount: 0, costCents: 0 };
+  }
+
+  const modelCandidate =
+    typeof details.modelId === "string"
+      ? details.modelId
+      : typeof details.model === "string"
+        ? details.model
+        : typeof details.modelUsed === "string"
+          ? details.modelUsed
+          : undefined;
+
+  const source = typeof details.source === "string" ? details.source : undefined;
+  const timestampCandidate =
+    typeof details.timestamp === "string"
+      ? details.timestamp
+      : typeof details.occurredAt === "string"
+        ? details.occurredAt
+        : undefined;
+  const timestamp =
+    timestampCandidate && !Number.isNaN(Date.parse(timestampCandidate))
+      ? new Date(timestampCandidate).toISOString()
+      : undefined;
+
+  return {
+    modelId: modelCandidate,
+    tokenCount: toNonNegativeInt(
+      details.modelTokenCount ?? details.tokenCount ?? details.tokensUsed ?? details.tokens,
+    ),
+    costCents: toNonNegativeInt(details.costCents ?? details.cost),
+    source,
+    timestamp,
+  };
+}
+
+function mergeUsageMetricsByModel(
+  input: Array<{ modelId?: string; tokenCount: number; costCents: number }>,
+): Array<{
+  modelId: string;
+  tokenCount: number;
+  costCents: number;
+}> {
+  const merged = new Map<string, { tokenCount: number; costCents: number }>();
+  for (const metric of input) {
+    const modelId = metric.modelId?.trim();
+    if (!modelId) {
+      continue;
+    }
+    const current = merged.get(modelId) ?? { tokenCount: 0, costCents: 0 };
+    current.tokenCount += toNonNegativeInt(metric.tokenCount);
+    current.costCents += toNonNegativeInt(metric.costCents);
+    merged.set(modelId, current);
+  }
+  return [...merged.entries()].map(([modelId, value]) => ({
+    modelId,
+    tokenCount: value.tokenCount,
+    costCents: value.costCents,
+  }));
+}
+
+function usageKeyFromStorageRow(row: TokenUsage): string {
+  const provider = (row.provider ?? "").trim();
+  const model = (row.model ?? "").trim();
+  if (!provider && !model) return "";
+  if (!provider) return model;
+  if (!model) return provider;
+  return `${provider}/${model}`;
+}
+
 export async function runCommand(options: RunOptions = {}): Promise<void> {
   const started = performance.now();
   const repoPath = process.cwd();
+  let globalConfig: ReturnType<typeof getGlobalConfig> | null = null;
+  try {
+    globalConfig = getGlobalConfig();
+  } catch {
+    globalConfig = null;
+  }
   const repoConfig = getRepoConfig(repoPath);
   const trigger = options.trigger ?? "manual";
   const effectiveCheckTypes = options.checkTypes ?? repoConfig.checkTypes;
@@ -24,6 +119,8 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
   let checks: CheckResult[] | undefined;
   let summary: RunSummary | undefined;
   let runId: number | undefined;
+  let storageTokenUsage: TokenUsage[] = [];
+  let ingestTimestamp = new Date().toISOString();
 
   try {
     const repo =
@@ -49,6 +146,7 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
     let checksPassed = 0;
     let checksFailed = 0;
     for (const check of checks) {
+      const usage = parseCheckUsageMetric(check);
       if (check.status === "passed") {
         checksPassed += 1;
       } else if (check.status === "failed" || check.status === "error") {
@@ -62,8 +160,9 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
         status: check.status,
         message: check.issues[0]?.message ?? `${check.name} finished`,
         details: check.details,
-        tokensUsed: 0,
-        costCents: 0,
+        modelUsed: usage.modelId,
+        tokensUsed: usage.tokenCount,
+        costCents: usage.costCents,
       });
     }
 
@@ -85,6 +184,14 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
       summary.checksFailed,
       summary.durationMs,
     );
+    storageTokenUsage = storage.getTokenUsageForRun(runId);
+    const persistedRun = storage.getRun(runId);
+    if (persistedRun?.created_at) {
+      const parsed = Date.parse(persistedRun.created_at);
+      if (!Number.isNaN(parsed)) {
+        ingestTimestamp = new Date(parsed).toISOString();
+      }
+    }
     storage.incrementInteractionCount();
   } catch (error) {
     if (runId !== undefined) {
@@ -101,6 +208,70 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
   }
 
   const reportPath = writeReport(repoPath, summary, checks);
+
+  if (globalConfig?.apiKey) {
+    try {
+      const checkMetrics = checks.map((check) => parseCheckUsageMetric(check));
+      const checkLevelTokenCount = checkMetrics.reduce((sum, metric) => sum + metric.tokenCount, 0);
+      const checkLevelCostCents = checkMetrics.reduce((sum, metric) => sum + metric.costCents, 0);
+
+      const storageLevelTokenCount = storageTokenUsage.reduce(
+        (sum, usage) => sum + toNonNegativeInt(usage.input_tokens + usage.output_tokens),
+        0,
+      );
+      const storageLevelCostCents = storageTokenUsage.reduce(
+        (sum, usage) => sum + toNonNegativeInt(usage.cost_cents),
+        0,
+      );
+
+      const storageModelMetrics = mergeUsageMetricsByModel(
+        storageTokenUsage.map((usage) => ({
+          modelId: usageKeyFromStorageRow(usage),
+          tokenCount: toNonNegativeInt(usage.input_tokens + usage.output_tokens),
+          costCents: toNonNegativeInt(usage.cost_cents),
+        })),
+      );
+
+      const storageModelIds = new Set(storageModelMetrics.map((m) => m.modelId));
+      const checkFallbackMetrics = mergeUsageMetricsByModel(
+        checkMetrics
+          .filter((m) => m.modelId && !storageModelIds.has(m.modelId))
+          .map((m) => ({
+            modelId: m.modelId,
+            tokenCount: m.tokenCount,
+            costCents: m.costCents,
+          })),
+      );
+
+      const modelMetrics =
+        storageModelMetrics.length > 0
+          ? [...storageModelMetrics, ...checkFallbackMetrics]
+          : mergeUsageMetricsByModel(checkMetrics);
+
+      const totalTokens =
+        storageLevelTokenCount > 0 ? storageLevelTokenCount : Math.max(0, checkLevelTokenCount);
+      const totalCostCents =
+        storageLevelCostCents > 0 ? storageLevelCostCents : Math.max(0, checkLevelCostCents);
+
+      const payloads = buildUsageIngestPayloads({
+        source: trigger,
+        occurredAt: ingestTimestamp,
+        runCount: 1,
+        modelTokenCount: totalTokens,
+        costCents: totalCostCents,
+        modelMetrics,
+      });
+      for (const payload of payloads) {
+        await ingestUsageEvent({
+          apiUrl: globalConfig.apiUrl,
+          apiKey: globalConfig.apiKey,
+          payload,
+        });
+      }
+    } catch {
+      // Best-effort ingest path; local checks should not fail due to cloud telemetry outages.
+    }
+  }
 
   if (summary.status === "passed") {
     console.log(chalk.green("All checks passed."));

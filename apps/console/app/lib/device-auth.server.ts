@@ -1,6 +1,8 @@
 const DEVICE_CODE_BYTES = 18;
 const API_KEY_BYTES = 24;
 
+import { createApiKeyForOrg } from "./api-keys.server";
+
 export const DEVICE_AUTH_POLL_INTERVAL_SECONDS = 2;
 export const DEVICE_AUTH_EXPIRES_IN_SECONDS = 600;
 
@@ -74,6 +76,7 @@ export async function createDeviceSession(db: DeviceAuthDatabase): Promise<{
 export async function approveDeviceSession(
   db: DeviceAuthDatabase,
   deviceCode: string,
+  context?: { organizationId?: string; userId?: string },
 ): Promise<"approved" | "not_found" | "expired"> {
   const normalizedCode = deviceCode.trim();
   if (!normalizedCode) {
@@ -103,6 +106,16 @@ export async function approveDeviceSession(
       .bind(normalizedCode, token)
       .first<{ token: string | null }>();
     if (approved?.token === token) {
+      if (context?.organizationId && context?.userId) {
+        await createApiKeyForOrg({
+          db,
+          organizationId: context.organizationId,
+          createdByUserId: context.userId,
+          keyName: "CLI Device Login",
+          rawToken: token,
+          scopes: "usage:ingest",
+        });
+      }
       return "approved";
     }
   }

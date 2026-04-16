@@ -83,6 +83,12 @@ type TrendRow = {
   tokens: number | null;
 };
 
+type ModelAggregateRow = {
+  model_id: string | null;
+  tokens: number | null;
+  runs: number | null;
+};
+
 function startOfMonthUtc(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
 }
@@ -235,6 +241,49 @@ async function queryTrendPoints(
   return points;
 }
 
+async function queryTopModels(
+  db: D1DatabaseLike,
+  organizationId: string,
+  startIsoInclusive: string,
+  endIsoExclusive: string,
+  totalTokens: number,
+): Promise<ModelUsageEntry[]> {
+  const rows = await db
+    .prepare(
+      [
+        "SELECT",
+        "model_id,",
+        "COALESCE(SUM(tokens), 0) AS tokens,",
+        "COALESCE(SUM(runs), 0) AS runs",
+        "FROM org_usage_model_daily",
+        "WHERE organization_id = ?",
+        "AND usage_date >= ?",
+        "AND usage_date < ?",
+        "GROUP BY model_id",
+        "ORDER BY tokens DESC",
+        "LIMIT 8",
+      ].join(" "),
+    )
+    .bind(organizationId, startIsoInclusive.slice(0, 10), endIsoExclusive.slice(0, 10))
+    .all<ModelAggregateRow>();
+
+  const denom = totalTokens > 0 ? totalTokens : 0;
+  return rows
+    .map((row) => {
+      const modelId = (row.model_id ?? "").trim();
+      if (!modelId) return null;
+      const tokens = toInt(row.tokens);
+      const runs = toInt(row.runs);
+      return {
+        modelId,
+        tokens,
+        runs,
+        tokenShare: denom > 0 ? Math.min(1, tokens / denom) : 0,
+      } satisfies ModelUsageEntry;
+    })
+    .filter((row): row is ModelUsageEntry => Boolean(row));
+}
+
 function toDirection(delta: number): UsageTrend["runsDirection"] {
   if (Math.abs(delta) < 0.04) return "flat";
   return delta > 0 ? "up" : "down";
@@ -266,6 +315,7 @@ function getQuotaStatus(args: {
 export async function getUsagePageDataFromD1(args: {
   db: D1DatabaseLike;
   org: ConsoleOrg;
+  membershipRole: "owner" | "member";
   organizationId: string;
   now?: Date;
 }): Promise<UsagePageData> {
@@ -318,6 +368,14 @@ export async function getUsagePageDataFromD1(args: {
     periodReset.toISOString(),
     now,
   );
+
+  const topModels = await queryTopModels(
+    args.db,
+    args.organizationId,
+    periodStart.toISOString(),
+    periodReset.toISOString(),
+    usedTokens,
+  );
   const quotaStatus = getQuotaStatus({
     monthlyRuns: quota.monthlyRuns,
     monthlyTokens: quota.monthlyTokens,
@@ -326,7 +384,7 @@ export async function getUsagePageDataFromD1(args: {
   });
 
   return {
-    currentOrg: resolveCurrentOrg(args.org),
+    currentOrg: resolveCurrentOrg({ org: args.org, membershipRole: args.membershipRole }),
     period,
     quota,
     cli: {
@@ -346,8 +404,7 @@ export async function getUsagePageDataFromD1(args: {
         points: trendPoints,
       },
     },
-    // `org_usage_daily` is organization-level; no per-model breakdown exists in this aggregate table.
-    models: { topModels: [] },
+    models: { topModels },
     quotaStatus,
   };
 }

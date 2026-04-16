@@ -15,6 +15,25 @@ type BillingActionResult = {
   error?: string;
 };
 
+type BillingCloudEnv = {
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_SECRET?: string;
+  STRIPE_PRICE_PRO?: string;
+  STRIPE_PRICE_ENTERPRISE?: string;
+  STRIPE_PRODUCT_PRO?: string;
+  STRIPE_PRODUCT_ENTERPRISE?: string;
+};
+
+function normalizeStripeId(
+  value: string | undefined,
+  expectedPrefix: "price_" | "prod_",
+): string | undefined {
+  const raw = (value ?? "").trim();
+  if (!raw) return undefined;
+  if (raw.includes("replace_me")) return undefined;
+  return raw.startsWith(expectedPrefix) ? raw : undefined;
+}
+
 function parseCheckbox(formData: FormData, key: string): boolean {
   return formData.get(key) === "on";
 }
@@ -38,13 +57,15 @@ export async function action({
   const { requireCurrentOrgAccess } = await import("~/lib/current-org.server");
   const {
     getBillingModelForOrg,
+    createStripeCheckoutSession,
+    createStripePortalSession,
     isBillingPlanTier,
     updateBillingContactAndPreferences,
     updateSelectedPlanTier,
   } = await import("~/lib/billing.server");
   const { authDb, org } = await requireCurrentOrgAccess({ request, context });
 
-  await getBillingModelForOrg({
+  const billingModel = await getBillingModelForOrg({
     db: authDb,
     orgId: org.id,
     orgName: org.name,
@@ -52,6 +73,12 @@ export async function action({
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
+  const cloudflareContext =
+    typeof context === "object" && context !== null && "cloudflare" in context
+      ? (context.cloudflare as { env?: BillingCloudEnv })
+      : undefined;
+  const env = cloudflareContext?.env;
+  const stripeSecret = env?.STRIPE_SECRET_KEY ?? env?.STRIPE_SECRET;
 
   if (intent === "update-plan-tier") {
     const tierValue = String(formData.get("tier") ?? "");
@@ -89,13 +116,75 @@ export async function action({
     return { ok: true, message: "Billing contact and preferences saved." };
   }
 
+  if (intent === "open-checkout") {
+    if (!stripeSecret) {
+      return {
+        ok: false,
+        message: "Stripe is not configured.",
+        error: "Missing STRIPE_SECRET_KEY or STRIPE_SECRET.",
+      };
+    }
+    const targetTier = String(formData.get("tier") ?? "pro");
+    const priceId = normalizeStripeId(
+      targetTier === "enterprise" ? env?.STRIPE_PRICE_ENTERPRISE : env?.STRIPE_PRICE_PRO,
+      "price_",
+    );
+    const productId = normalizeStripeId(
+      targetTier === "enterprise" ? env?.STRIPE_PRODUCT_ENTERPRISE : env?.STRIPE_PRODUCT_PRO,
+      "prod_",
+    );
+    const fallbackAmountCents = targetTier === "enterprise" ? 5000 : 2000;
+    if (!priceId && !productId) {
+      return {
+        ok: false,
+        message: "Stripe is not fully configured.",
+        error:
+          "Missing STRIPE_PRICE_PRO/STRIPE_PRICE_ENTERPRISE or STRIPE_PRODUCT_PRO/STRIPE_PRODUCT_ENTERPRISE.",
+      };
+    }
+    const origin = new URL(request.url).origin;
+    const checkoutUrl = await createStripeCheckoutSession({
+      db: authDb,
+      orgId: org.id,
+      orgName: org.name,
+      billingEmail: billingModel.contact.billingEmail,
+      stripeSecretKey: stripeSecret,
+      stripePriceId: priceId,
+      stripeProductId: priceId ? undefined : productId,
+      unitAmountCents: priceId ? undefined : fallbackAmountCents,
+      successUrl: `${origin}/billing?checkout=success`,
+      cancelUrl: `${origin}/billing?checkout=cancel`,
+    });
+    throw Response.redirect(checkoutUrl, 302);
+  }
+
+  if (intent === "open-portal") {
+    if (!stripeSecret) {
+      return {
+        ok: false,
+        message: "Stripe is not configured.",
+        error: "Missing STRIPE_SECRET_KEY or STRIPE_SECRET.",
+      };
+    }
+    const origin = new URL(request.url).origin;
+    const portalUrl = await createStripePortalSession({
+      db: authDb,
+      orgId: org.id,
+      orgName: org.name,
+      billingEmail: billingModel.contact.billingEmail,
+      stripeSecretKey: stripeSecret,
+      returnUrl: `${origin}/billing`,
+    });
+    throw Response.redirect(portalUrl, 302);
+  }
+
   return { ok: false, message: "No changes applied.", error: "Unknown action intent." };
 }
 
 export default function BillingRoute() {
   const billing = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const { limits, org, plan, stripe, links } = billing;
+  const { limits, org, plan, stripe } = billing;
 
   function formatCompactInt(value: number): string {
     return new Intl.NumberFormat(undefined, {
@@ -147,25 +236,29 @@ export default function BillingRoute() {
             </button>
           </Form>
 
-          <div className="mt-3 space-y-2">
-            <a
-              href={links.upgradeCheckoutUrl}
+          <Form method="post" className="mt-3 space-y-2">
+            <input type="hidden" name="intent" value="open-checkout" />
+            <input type="hidden" name="tier" value={plan.tier === "free" ? "pro" : plan.tier} />
+            <button
+              type="submit"
               className="block w-full rounded-lg border border-border bg-panel px-4 py-2 text-center text-sm font-medium text-text-primary hover:bg-panel-soft"
             >
-              Open checkout scaffold
-            </a>
-            <a
-              href={links.billingPortalUrl}
+              Open Stripe checkout
+            </button>
+          </Form>
+          <Form method="post" className="mt-2">
+            <input type="hidden" name="intent" value="open-portal" />
+            <button
+              type="submit"
               className="block w-full rounded-lg border border-border bg-panel px-4 py-2 text-center text-sm font-medium text-text-primary hover:bg-panel-soft"
             >
-              Open billing portal scaffold
-            </a>
-          </div>
+              Open Stripe billing portal
+            </button>
+          </Form>
 
           {!stripe.isIntegrated && (
             <p className="mt-3 text-xs text-text-muted">
-              Stripe integration scaffolded. IDs remain nullable until checkout and portal are
-              wired.
+              Stripe IDs are populated once checkout/portal sessions are created.
             </p>
           )}
         </div>

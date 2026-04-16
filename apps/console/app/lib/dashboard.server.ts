@@ -71,13 +71,15 @@ function toSafeNumber(value: number | null | undefined): number {
 export async function getDashboardData({
   db,
   org,
+  membershipRole,
   tier,
 }: {
   db: D1DatabaseLike;
   org: ConsoleOrg;
+  membershipRole: "owner" | "member";
   tier: string;
 }): Promise<DashboardData> {
-  const currentOrg = resolveCurrentOrg(org);
+  const currentOrg = resolveCurrentOrg({ org, membershipRole });
 
   const recentActivityRows = await queryAll<ActivityRow>(
     db,

@@ -2,14 +2,6 @@ import { Form, useActionData, useLoaderData, useNavigation } from "react-router"
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import type { ReactNode } from "react";
 
-import { getConsoleAuthDbFromContext } from "~/lib/org-context.server";
-import { requireConsoleOrgContext } from "~/lib/route-auth.server";
-import {
-  getSettingsPageData,
-  updateNotificationPreferences,
-  updateOrganizationProfile,
-} from "~/lib/settings.server";
-
 type PanelProps = {
   title: string;
   description?: string;
@@ -38,12 +30,26 @@ export const meta: MetaFunction = () => [
 ];
 
 type ActionData =
-  | { ok: true; intent: "update-profile" | "update-notifications"; message: string }
-  | { ok: false; intent: "update-profile" | "update-notifications"; message: string };
+  | {
+      ok: true;
+      intent: "update-profile" | "update-notifications" | "create-api-key" | "revoke-api-key";
+      message: string;
+      rawApiKey?: string;
+    }
+  | {
+      ok: false;
+      intent: "update-profile" | "update-notifications" | "create-api-key" | "revoke-api-key";
+      message: string;
+    };
 
 function getIntent(formData: FormData): ActionData["intent"] | null {
   const intent = `${formData.get("intent") ?? ""}`.trim();
-  if (intent === "update-profile" || intent === "update-notifications") {
+  if (
+    intent === "update-profile" ||
+    intent === "update-notifications" ||
+    intent === "create-api-key" ||
+    intent === "revoke-api-key"
+  ) {
     return intent;
   }
   return null;
@@ -65,21 +71,55 @@ function formatDateTime(iso: string | null): string {
 }
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
-  const { session, orgContext } = await requireConsoleOrgContext({ request, context });
+  const { getConsoleAuthDbFromContext } = await import("~/lib/org-context.server");
+  const { requireConsoleOrgContext } = await import("~/lib/route-auth.server");
+  const { getSettingsPageData } = await import("~/lib/settings.server");
+  const { getStripeConfigStatusFromEnv } = await import("~/lib/stripe-config.server");
+  const requestedOrgId = new URL(request.url).searchParams.get("org");
+  const { session, orgContext } = await requireConsoleOrgContext({
+    request,
+    context,
+    requestedOrgId,
+  });
   const authDb = getConsoleAuthDbFromContext(context);
   if (!authDb) {
     throw new Response("Console auth DB is unavailable.", { status: 500 });
   }
 
-  return getSettingsPageData({
+  const settingsData = await getSettingsPageData({
     db: authDb as Parameters<typeof getSettingsPageData>[0]["db"],
     session,
     orgContext,
   });
+  const cloudflareContext =
+    typeof context === "object" && context !== null && "cloudflare" in context
+      ? (context.cloudflare as { env?: Record<string, unknown> })
+      : undefined;
+  const stripeConfigStatus =
+    orgContext.membershipRole === "owner"
+      ? getStripeConfigStatusFromEnv(cloudflareContext?.env)
+      : null;
+
+  return {
+    ...settingsData,
+    membershipRole: orgContext.membershipRole,
+    stripeConfigStatus,
+  };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
-  const { session, orgContext } = await requireConsoleOrgContext({ request, context });
+  const { getConsoleAuthDbFromContext } = await import("~/lib/org-context.server");
+  const { requireConsoleOrgContext } = await import("~/lib/route-auth.server");
+  const { updateNotificationPreferences, updateOrganizationProfile } =
+    await import("~/lib/settings.server");
+  const { createSettingsApiKey, revokeSettingsApiKey } =
+    await import("~/lib/settings/api-keys.server");
+  const requestedOrgId = new URL(request.url).searchParams.get("org");
+  const { session, orgContext } = await requireConsoleOrgContext({
+    request,
+    context,
+    requestedOrgId,
+  });
   const authDb = getConsoleAuthDbFromContext(context);
   if (!authDb) {
     return {
@@ -136,6 +176,81 @@ export async function action({ request, context }: ActionFunctionArgs) {
     } satisfies ActionData;
   }
 
+  if (intent === "create-api-key") {
+    const keyName = `${formData.get("keyName") ?? ""}`.trim();
+    if (!keyName) {
+      return {
+        ok: false,
+        intent,
+        message: "API key name is required.",
+      } satisfies ActionData;
+    }
+    if (keyName.length > 120) {
+      return {
+        ok: false,
+        intent,
+        message: "API key name must be 120 characters or less.",
+      } satisfies ActionData;
+    }
+
+    try {
+      const createdKey = await createSettingsApiKey({
+        db: authDb as Parameters<typeof createSettingsApiKey>[0]["db"],
+        organizationId: orgContext.org.id,
+        createdByUserId: session.user.id,
+        keyName,
+      });
+      return {
+        ok: true,
+        intent,
+        message: "API key created. Copy it now, it will not be shown again.",
+        rawApiKey: createdKey.rawKey,
+      } satisfies ActionData;
+    } catch {
+      return {
+        ok: false,
+        intent,
+        message: "Failed to create API key. Please try again.",
+      } satisfies ActionData;
+    }
+  }
+
+  if (intent === "revoke-api-key") {
+    const apiKeyId = `${formData.get("apiKeyId") ?? ""}`.trim();
+    if (!apiKeyId) {
+      return {
+        ok: false,
+        intent,
+        message: "API key id is required.",
+      } satisfies ActionData;
+    }
+    try {
+      const revoked = await revokeSettingsApiKey({
+        db: authDb as Parameters<typeof revokeSettingsApiKey>[0]["db"],
+        organizationId: orgContext.org.id,
+        apiKeyId,
+      });
+      if (!revoked) {
+        return {
+          ok: false,
+          intent,
+          message: "API key not found or already revoked.",
+        } satisfies ActionData;
+      }
+    } catch {
+      return {
+        ok: false,
+        intent,
+        message: "Failed to revoke API key. Please try again.",
+      } satisfies ActionData;
+    }
+    return {
+      ok: true,
+      intent,
+      message: "API key revoked.",
+    } satisfies ActionData;
+  }
+
   try {
     await updateNotificationPreferences({
       db: authDb as Parameters<typeof updateNotificationPreferences>[0]["db"],
@@ -167,10 +282,17 @@ export default function SettingsRoute() {
   const pendingIntent =
     navigation.state === "submitting" ? getIntent(navigation.formData ?? new FormData()) : null;
   const profileIsSaving = pendingIntent === "update-profile";
+  const apiKeysIsSaving = pendingIntent === "create-api-key" || pendingIntent === "revoke-api-key";
   const notificationsIsSaving = pendingIntent === "update-notifications";
 
   const profileFeedback = actionData?.intent === "update-profile" ? actionData : null;
+  const apiKeysFeedback =
+    actionData?.intent === "create-api-key" || actionData?.intent === "revoke-api-key"
+      ? actionData
+      : null;
   const notificationsFeedback = actionData?.intent === "update-notifications" ? actionData : null;
+
+  const stripeConfigStatus = "stripeConfigStatus" in data ? data.stripeConfigStatus : null;
 
   return (
     <main className="grid gap-4 lg:grid-cols-2">
@@ -277,6 +399,47 @@ export default function SettingsRoute() {
 
       <SettingsPanel title="API keys" description="Create and revoke keys for Preships API access.">
         <div className="space-y-4">
+          <Form method="post" className="space-y-3 rounded-lg border border-border bg-bg p-4">
+            <input type="hidden" name="intent" value="create-api-key" />
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-text-primary">Key name</span>
+              <input
+                name="keyName"
+                type="text"
+                required
+                maxLength={120}
+                placeholder="Usage ingest key"
+                className="w-full rounded-lg border border-border bg-panel px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              />
+            </label>
+            <div className="flex items-center justify-end">
+              <button
+                type="submit"
+                disabled={apiKeysIsSaving}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {pendingIntent === "create-api-key" ? "Creating..." : "Create API key"}
+              </button>
+            </div>
+          </Form>
+
+          {apiKeysFeedback ? (
+            <div
+              className={`rounded-lg border p-3 text-sm ${
+                apiKeysFeedback.ok
+                  ? "border-accent/50 bg-accent/10 text-accent"
+                  : "border-red-400/50 bg-red-500/10 text-red-300"
+              }`}
+            >
+              <p>{apiKeysFeedback.message}</p>
+              {"rawApiKey" in apiKeysFeedback && apiKeysFeedback.rawApiKey ? (
+                <p className="mt-2 break-all text-xs text-text-primary">
+                  New key: <code>{apiKeysFeedback.rawApiKey}</code>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {data.apiKeys.length === 0 ? (
             <div className="rounded-lg border border-border bg-bg p-4 text-sm text-text-muted">
               No API keys exist for this organization yet.
@@ -301,6 +464,19 @@ export default function SettingsRoute() {
                     {formatDateTime(apiKey.createdAt)} · last used{" "}
                     {formatDateTime(apiKey.lastUsedAt)}
                   </p>
+                  {!apiKey.revokedAt ? (
+                    <Form method="post" className="mt-3">
+                      <input type="hidden" name="intent" value="revoke-api-key" />
+                      <input type="hidden" name="apiKeyId" value={apiKey.id} />
+                      <button
+                        type="submit"
+                        disabled={apiKeysIsSaving}
+                        className="rounded-md border border-yellow-300/60 px-2.5 py-1 text-xs font-medium text-yellow-200 hover:bg-yellow-300/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {pendingIntent === "revoke-api-key" ? "Revoking..." : "Revoke key"}
+                      </button>
+                    </Form>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -382,6 +558,86 @@ export default function SettingsRoute() {
           </div>
         </Form>
       </SettingsPanel>
+
+      {stripeConfigStatus ? (
+        <SettingsPanel
+          title="Stripe configuration"
+          description="Owner-only. Shows whether required Stripe environment variables are present."
+        >
+          <div className="space-y-3 rounded-lg border border-border bg-bg p-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-text-muted">Stripe secret</span>
+              <span className={stripeConfigStatus.hasStripeSecret ? "text-accent" : "text-red-300"}>
+                {stripeConfigStatus.hasStripeSecret ? "Present" : "Missing"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-text-muted">Webhook secret</span>
+              <span
+                className={
+                  stripeConfigStatus.hasStripeWebhookSecret ? "text-accent" : "text-red-300"
+                }
+              >
+                {stripeConfigStatus.hasStripeWebhookSecret ? "Present" : "Missing"}
+              </span>
+            </div>
+
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs uppercase tracking-wide text-text-muted">Price IDs</p>
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-text-muted">Pro</span>
+                  <span
+                    className={
+                      stripeConfigStatus.hasPriceIds.pro ? "text-accent" : "text-yellow-200"
+                    }
+                  >
+                    {stripeConfigStatus.hasPriceIds.pro ? "Present" : "Missing (will fallback)"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-text-muted">Enterprise</span>
+                  <span
+                    className={
+                      stripeConfigStatus.hasPriceIds.enterprise ? "text-accent" : "text-yellow-200"
+                    }
+                  >
+                    {stripeConfigStatus.hasPriceIds.enterprise
+                      ? "Present"
+                      : "Missing (will fallback)"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs uppercase tracking-wide text-text-muted">Product IDs</p>
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-text-muted">Pro</span>
+                  <span
+                    className={
+                      stripeConfigStatus.hasProductIds.pro ? "text-accent" : "text-red-300"
+                    }
+                  >
+                    {stripeConfigStatus.hasProductIds.pro ? "Present" : "Missing"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-text-muted">Enterprise</span>
+                  <span
+                    className={
+                      stripeConfigStatus.hasProductIds.enterprise ? "text-accent" : "text-red-300"
+                    }
+                  >
+                    {stripeConfigStatus.hasProductIds.enterprise ? "Present" : "Missing"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SettingsPanel>
+      ) : null}
     </main>
   );
 }

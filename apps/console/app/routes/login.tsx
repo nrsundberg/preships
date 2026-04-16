@@ -1,9 +1,8 @@
 import { Form, Link, redirect, useSearchParams } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
-import { getConsoleSession } from "~/lib/auth.server";
-
 export async function loader({ request }: LoaderFunctionArgs) {
+  const { getConsoleSession } = await import("~/lib/auth.server");
   const session = await getConsoleSession(request);
   if (session) {
     throw redirect("/");

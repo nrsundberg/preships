@@ -1,10 +1,9 @@
 import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
-import { requireConsoleOrgContext } from "~/lib/route-auth.server";
-
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { getDashboardData } = await import("~/lib/dashboard.server");
+  const { requireConsoleOrgContext } = await import("~/lib/route-auth.server");
   const url = new URL(request.url);
   const requestedOrgId = url.searchParams.get("org");
   const { authDb, orgContext } = await requireConsoleOrgContext({
@@ -15,6 +14,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const dashboard = await getDashboardData({
     db: authDb,
     org: orgContext.org,
+    membershipRole: orgContext.membershipRole,
     tier: orgContext.tier,
   });
   return { dashboard };

@@ -318,3 +318,202 @@ export async function updateBillingContactAndPreferences(params: {
     )
     .run();
 }
+
+function formEncode(input: Record<string, string>): string {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) {
+    body.set(key, value);
+  }
+  return body.toString();
+}
+
+async function stripeRequest(params: {
+  secretKey: string;
+  endpoint: string;
+  body: Record<string, string>;
+}): Promise<Record<string, unknown>> {
+  const response = await fetch(`https://api.stripe.com/v1/${params.endpoint}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${params.secretKey}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: formEncode(params.body),
+  });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      typeof payload.error === "object" &&
+      payload.error &&
+      "message" in payload.error &&
+      typeof payload.error.message === "string"
+        ? payload.error.message
+        : `Stripe API error (${response.status})`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
+async function upsertStripeCustomer(params: {
+  db: D1DatabaseLike;
+  orgId: string;
+  orgName: string;
+  billingEmail: string | null;
+  secretKey: string;
+}): Promise<string> {
+  const existing = await params.db
+    .prepare("SELECT stripe_customer_id FROM org_billing WHERE organization_id = ? LIMIT 1")
+    .bind(params.orgId)
+    .first<{ stripe_customer_id: string | null }>();
+  if (existing?.stripe_customer_id) {
+    return existing.stripe_customer_id;
+  }
+
+  const created = await stripeRequest({
+    secretKey: params.secretKey,
+    endpoint: "customers",
+    body: {
+      name: params.orgName,
+      email: params.billingEmail ?? "",
+      "metadata[organization_id]": params.orgId,
+    },
+  });
+  const customerId =
+    typeof created.id === "string" && created.id.startsWith("cus_") ? created.id : null;
+  if (!customerId) {
+    throw new Error("Stripe did not return a customer ID.");
+  }
+
+  await params.db
+    .prepare(
+      "UPDATE org_billing SET stripe_customer_id = ?, updated_at = ? WHERE organization_id = ?",
+    )
+    .bind(customerId, nowIso(), params.orgId)
+    .run();
+  return customerId;
+}
+
+function isStripePriceId(value: unknown): value is string {
+  return typeof value === "string" && value.trim().startsWith("price_");
+}
+
+function isStripeProductId(value: unknown): value is string {
+  return typeof value === "string" && value.trim().startsWith("prod_");
+}
+
+export async function createStripeCheckoutSession(params: {
+  db: D1DatabaseLike;
+  orgId: string;
+  orgName: string;
+  billingEmail: string | null;
+  stripeSecretKey: string;
+  stripePriceId?: string;
+  stripeProductId?: string;
+  unitAmountCents?: number;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<string> {
+  await ensureOrgBillingTable(params.db);
+  const customerId = await upsertStripeCustomer({
+    db: params.db,
+    orgId: params.orgId,
+    orgName: params.orgName,
+    billingEmail: params.billingEmail,
+    secretKey: params.stripeSecretKey,
+  });
+
+  const body: Record<string, string> = {
+    mode: "subscription",
+    customer: customerId,
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    "line_items[0][quantity]": "1",
+    "metadata[organization_id]": params.orgId,
+  };
+  if (typeof params.stripePriceId === "string" && params.stripePriceId.trim()) {
+    if (!isStripePriceId(params.stripePriceId)) {
+      throw new Error("Invalid Stripe price ID. Expected a value starting with price_.");
+    }
+    body["line_items[0][price]"] = params.stripePriceId.trim();
+  } else if (
+    typeof params.stripeProductId === "string" &&
+    params.stripeProductId.trim() &&
+    typeof params.unitAmountCents === "number"
+  ) {
+    if (!isStripeProductId(params.stripeProductId)) {
+      throw new Error("Invalid Stripe product ID. Expected a value starting with prod_.");
+    }
+    console.warn(
+      [
+        "[billing] Using Stripe product+amount fallback for checkout session.",
+        "Set STRIPE_PRICE_PRO / STRIPE_PRICE_ENTERPRISE to canonical price IDs to avoid this path.",
+      ].join(" "),
+    );
+    body["line_items[0][price_data][currency]"] = "usd";
+    body["line_items[0][price_data][unit_amount]"] = String(
+      Math.max(1, Math.round(params.unitAmountCents)),
+    );
+    body["line_items[0][price_data][recurring][interval]"] = "month";
+    body["line_items[0][price_data][product]"] = params.stripeProductId.trim();
+  } else {
+    throw new Error("Missing Stripe price or product+amount configuration.");
+  }
+
+  const session = await stripeRequest({
+    secretKey: params.stripeSecretKey,
+    endpoint: "checkout/sessions",
+    body,
+  });
+
+  const sessionUrl = typeof session.url === "string" ? session.url : null;
+  const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
+  if (!sessionUrl) {
+    throw new Error("Stripe checkout session did not return a URL.");
+  }
+
+  await params.db
+    .prepare(
+      "UPDATE org_billing SET stripe_price_id = ?, stripe_subscription_id = COALESCE(?, stripe_subscription_id), updated_at = ? WHERE organization_id = ?",
+    )
+    .bind(
+      isStripePriceId(params.stripePriceId) ? params.stripePriceId.trim() : null,
+      subscriptionId,
+      nowIso(),
+      params.orgId,
+    )
+    .run();
+
+  return sessionUrl;
+}
+
+export async function createStripePortalSession(params: {
+  db: D1DatabaseLike;
+  orgId: string;
+  orgName: string;
+  billingEmail: string | null;
+  stripeSecretKey: string;
+  returnUrl: string;
+}): Promise<string> {
+  await ensureOrgBillingTable(params.db);
+  const customerId = await upsertStripeCustomer({
+    db: params.db,
+    orgId: params.orgId,
+    orgName: params.orgName,
+    billingEmail: params.billingEmail,
+    secretKey: params.stripeSecretKey,
+  });
+
+  const portal = await stripeRequest({
+    secretKey: params.stripeSecretKey,
+    endpoint: "billing_portal/sessions",
+    body: {
+      customer: customerId,
+      return_url: params.returnUrl,
+    },
+  });
+  const portalUrl = typeof portal.url === "string" ? portal.url : null;
+  if (!portalUrl) {
+    throw new Error("Stripe billing portal session did not return a URL.");
+  }
+  return portalUrl;
+}

@@ -485,6 +485,14 @@ export class Storage {
     });
   }
 
+  getTokenUsageForRun(runId: number): TokenUsage[] {
+    return this.runWithStorageError("fetch token usage by run", () => {
+      return this.db
+        .prepare("SELECT * FROM token_usage WHERE run_id = ? ORDER BY id")
+        .all(runId) as TokenUsage[];
+    });
+  }
+
   getTotalCost(repoId?: number, since?: string): number {
     return this.runWithStorageError("calculate total cost", () => {
       const conditions: string[] = [];

@@ -1,9 +1,6 @@
 import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
-import { requireConsoleOrgContext } from "~/lib/route-auth.server";
-import { getUsagePageDataFromD1 } from "~/lib/usage.server";
-
 function formatIsoDateShort(iso: string) {
   const d = new Date(iso);
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "2-digit" }).format(d);
@@ -26,6 +23,8 @@ function formatCompactInt(value: number) {
 }
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
+  const { requireConsoleOrgContext } = await import("~/lib/route-auth.server");
+  const { getUsagePageDataFromD1 } = await import("~/lib/usage.server");
   const url = new URL(request.url);
   const requestedOrgId = url.searchParams.get("org");
   const { authDb, orgContext } = await requireConsoleOrgContext({
@@ -36,6 +35,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   return getUsagePageDataFromD1({
     db: authDb,
     org: orgContext.org,
+    membershipRole: orgContext.membershipRole,
     organizationId: orgContext.org.id,
   });
 }

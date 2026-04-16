@@ -9,11 +9,13 @@ export type CurrentOrg = {
   role: "member" | "owner";
 };
 
-export function resolveCurrentOrg(org: ConsoleOrg): CurrentOrg {
-  const role: CurrentOrg["role"] = org.type === "personal" ? "owner" : "member";
+export function resolveCurrentOrg(
+  orgContext: Pick<ConsoleOrgContext, "org" | "membershipRole">,
+): CurrentOrg {
+  const role: CurrentOrg["role"] = orgContext.membershipRole;
   return {
-    orgId: org.id,
-    name: org.name,
+    orgId: orgContext.org.id,
+    name: orgContext.org.name,
     role,
   };
 }
@@ -35,7 +37,11 @@ type RequireCurrentOrgAccessArgs = {
 export async function requireCurrentOrgAccess(
   args: RequireCurrentOrgAccessArgs,
 ): Promise<CurrentOrgAccess> {
-  const { session, authDb, orgContext } = await requireConsoleOrgContext(args);
+  const requestedOrgId = args.requestedOrgId ?? new URL(args.request.url).searchParams.get("org");
+  const { session, authDb, orgContext } = await requireConsoleOrgContext({
+    ...args,
+    requestedOrgId,
+  });
   return {
     session,
     authDb,
