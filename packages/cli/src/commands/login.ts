@@ -4,10 +4,7 @@ import readline from "node:readline/promises";
 import chalk from "chalk";
 
 import { getGlobalConfig, setGlobalConfig } from "../config.js";
-import {
-  createDeviceAuthClient,
-  type DeviceAuthClient,
-} from "../cloud/device-auth.js";
+import { createDeviceAuthClient, type DeviceAuthClient } from "../cloud/device-auth.js";
 
 export interface LoginOptions {
   apiKey?: string;

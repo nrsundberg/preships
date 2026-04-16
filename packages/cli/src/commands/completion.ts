@@ -30,9 +30,7 @@ export function getCompletionScript(shell: SupportedShell): string {
 
 export function completionCommand(shell: string): void {
   if (!isSupportedShell(shell)) {
-    throw new Error(
-      `Unsupported shell "${shell}". Supported shells: bash, zsh, fish.`,
-    );
+    throw new Error(`Unsupported shell "${shell}". Supported shells: bash, zsh, fish.`);
   }
 
   process.stdout.write(getCompletionScript(shell));

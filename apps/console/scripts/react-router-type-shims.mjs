@@ -15,7 +15,16 @@ export * from "../../../app/root";
   "utf8",
 );
 
-const routeNames = ["app-shell", "billing", "dashboard", "usage", "settings", "signup", "login", "login-device"];
+const routeNames = [
+  "app-shell",
+  "billing",
+  "dashboard",
+  "usage",
+  "settings",
+  "signup",
+  "login",
+  "login-device",
+];
 
 for (const name of routeNames) {
   const shimPath = join(routesDir, `${name}.js.d.ts`);
@@ -27,4 +36,3 @@ export * from "../../../../app/routes/${name}";
     "utf8",
   );
 }
-

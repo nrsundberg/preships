@@ -1,10 +1,11 @@
 import { performance } from "node:perf_hooks";
 
+import { runBrowserAutomationFlow, type BrowserAutomationRunResult } from "./browser/automation.js";
 import {
-  runBrowserAutomationFlow,
-  type BrowserAutomationRunResult,
-} from "./browser/automation.js";
-import { normalizeCheckTypes, sortIssuesDeterministically, toStableDurationMs } from "./determinism.js";
+  normalizeCheckTypes,
+  sortIssuesDeterministically,
+  toStableDurationMs,
+} from "./determinism.js";
 import type { CheckResult } from "./types.js";
 
 export interface RunChecksInput {
@@ -35,9 +36,7 @@ function validateTargetUrl(targetUrl: string): string | null {
   }
 }
 
-export async function runDeterministicChecks(
-  input: RunChecksInput,
-): Promise<CheckResult[]> {
+export async function runDeterministicChecks(input: RunChecksInput): Promise<CheckResult[]> {
   const normalizedCheckTypes = normalizeCheckTypes(input.checkTypes);
   const results: CheckResult[] = [];
   const targetUrlValidationError = validateTargetUrl(input.targetUrl);
@@ -81,8 +80,8 @@ export async function runDeterministicChecks(
     ];
   }
 
-  const needsBrowserAutomation = normalizedCheckTypes.some((type) =>
-    type === "styles" || type === "console" || type === "network"
+  const needsBrowserAutomation = normalizedCheckTypes.some(
+    (type) => type === "styles" || type === "console" || type === "network",
   );
 
   let browserRun: BrowserAutomationRunResult | null = null;
@@ -101,7 +100,9 @@ export async function runDeterministicChecks(
 
     switch (type) {
       case "lighthouse":
-        results.push(okResult(type, "Lighthouse Audit", toStableDurationMs(start, performance.now())));
+        results.push(
+          okResult(type, "Lighthouse Audit", toStableDurationMs(start, performance.now())),
+        );
         break;
       case "accessibility":
         results.push(

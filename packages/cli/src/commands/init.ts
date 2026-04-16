@@ -170,7 +170,9 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     console.log(chalk.cyan("\nEnvironment checks"));
     console.log(`- System: ${system.os} ${system.arch}, ${system.totalRamGb} GB RAM`);
     console.log(`- Ollama: ${ollamaSummary}`);
-    console.log(`- Playwright: ${system.playwrightInstalled ? chalk.green("available") : chalk.yellow("missing")}`);
+    console.log(
+      `- Playwright: ${system.playwrightInstalled ? chalk.green("available") : chalk.yellow("missing")}`,
+    );
     console.log(`- Target URL: ${appSummary}`);
 
     console.log(chalk.cyan("\nSuggested next steps"));

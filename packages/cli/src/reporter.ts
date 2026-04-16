@@ -132,10 +132,7 @@ export function buildReportDocument(
       if (typeDelta !== 0) {
         return typeDelta;
       }
-      return (
-        a.name.localeCompare(b.name) ||
-        a.status.localeCompare(b.status)
-      );
+      return a.name.localeCompare(b.name) || a.status.localeCompare(b.status);
     });
 
   return {
@@ -174,9 +171,7 @@ export function formatReportMarkdown(document: ReportDocument): string {
   }
 
   lines.push("## Agent Instructions", "");
-  lines.push(
-    "- If failures are present, fix them before continuing major feature work.",
-  );
+  lines.push("- If failures are present, fix them before continuing major feature work.");
   lines.push("- Re-run `preships run` after each fix set.");
   lines.push("- Clear this file only after all critical checks pass.");
   lines.push("");

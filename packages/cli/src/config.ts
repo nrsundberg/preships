@@ -181,9 +181,7 @@ function parseBooleanFromEnv(raw: string, key: string): boolean {
   if (normalized === "false" || normalized === "0") {
     return false;
   }
-  throw new Error(
-    `Invalid environment variable ${key}: expected true|false|1|0, got "${raw}".`,
-  );
+  throw new Error(`Invalid environment variable ${key}: expected true|false|1|0, got "${raw}".`);
 }
 
 function parseNumberFromEnv(raw: string, key: string): number {
@@ -194,10 +192,7 @@ function parseNumberFromEnv(raw: string, key: string): number {
   return value;
 }
 
-function getEnvValue(
-  env: NodeJS.ProcessEnv,
-  ...keys: string[]
-): string | undefined {
+function getEnvValue(env: NodeJS.ProcessEnv, ...keys: string[]): string | undefined {
   for (const key of keys) {
     const value = env[key];
     if (typeof value === "string" && value.trim() !== "") {
@@ -212,21 +207,9 @@ function loadGlobalConfigFromEnv(env: NodeJS.ProcessEnv): Partial<GlobalConfig> 
   const apiUrl = getEnvValue(env, "PRESHIPS_API_URL");
   const modelEndpoint = getEnvValue(env, "PRESHIPS_MODEL_ENDPOINT");
   const defaultModel = getEnvValue(env, "PRESHIPS_DEFAULT_MODEL");
-  const apiKey = getEnvValue(
-    env,
-    "PRESHIPS_API_KEY",
-    "PRESHIPS_CLOUD_API_KEY",
-  );
-  const anthropicKey = getEnvValue(
-    env,
-    "PRESHIPS_PROVIDER_KEY_ANTHROPIC",
-    "ANTHROPIC_API_KEY",
-  );
-  const openaiKey = getEnvValue(
-    env,
-    "PRESHIPS_PROVIDER_KEY_OPENAI",
-    "OPENAI_API_KEY",
-  );
+  const apiKey = getEnvValue(env, "PRESHIPS_API_KEY", "PRESHIPS_CLOUD_API_KEY");
+  const anthropicKey = getEnvValue(env, "PRESHIPS_PROVIDER_KEY_ANTHROPIC", "ANTHROPIC_API_KEY");
+  const openaiKey = getEnvValue(env, "PRESHIPS_PROVIDER_KEY_OPENAI", "OPENAI_API_KEY");
   const googleKey = getEnvValue(
     env,
     "PRESHIPS_PROVIDER_KEY_GOOGLE",
@@ -285,8 +268,8 @@ function mergeGlobalConfig(
     ...fileConfig,
     ...envConfig,
     providerKeys: {
-      ...(fileConfig.providerKeys ?? {}),
-      ...(envConfig.providerKeys ?? {}),
+      ...fileConfig.providerKeys,
+      ...envConfig.providerKeys,
     },
   };
 }
@@ -381,10 +364,7 @@ export function getGlobalConfig(options: ConfigLoaderOptions = {}): GlobalConfig
   const parsedResult = globalConfigFileSchema.safeParse(parsed);
   if (!parsedResult.success) {
     throw new Error(
-      formatZodIssues(
-        parsedResult.error,
-        `Invalid global config file at ${configPath}.`,
-      ),
+      formatZodIssues(parsedResult.error, `Invalid global config file at ${configPath}.`),
     );
   }
 
@@ -484,19 +464,14 @@ export function isRepoInitialized(repoPath: string = process.cwd()): boolean {
 export function getRepoConfig(repoPath: string = process.cwd()): RepoConfig {
   const configPath = getRepoConfigPath(repoPath);
   if (!existsSync(configPath)) {
-    throw new Error(
-      `Repo not initialized at ${resolve(repoPath)}. Run "preships init" first.`,
-    );
+    throw new Error(`Repo not initialized at ${resolve(repoPath)}. Run "preships init" first.`);
   }
 
   const parsed = parseTomlFile<RepoConfig>(configPath);
   const parsedResult = repoConfigFileSchema.safeParse(parsed);
   if (!parsedResult.success) {
     throw new Error(
-      formatZodIssues(
-        parsedResult.error,
-        `Invalid repo config file at ${configPath}.`,
-      ),
+      formatZodIssues(parsedResult.error, `Invalid repo config file at ${configPath}.`),
     );
   }
 
@@ -520,10 +495,7 @@ export function getRepoConfig(repoPath: string = process.cwd()): RepoConfig {
   return validated.data;
 }
 
-export function initRepoConfig(
-  repoPath: string,
-  config: Partial<RepoConfig>,
-): void {
+export function initRepoConfig(repoPath: string, config: Partial<RepoConfig>): void {
   const repoDir = resolve(repoPath);
   const preshipsDir = getRepoPreshipsDir(repoDir);
   mkdirSync(preshipsDir, { recursive: true });
@@ -540,9 +512,7 @@ export function initRepoConfig(
   writeFileSync(getRepoConfigPath(repoDir), writeRepoToml(merged), "utf8");
 }
 
-export function loadGlobalConfigForTests(
-  options: ConfigLoaderOptions = {},
-): GlobalConfig {
+export function loadGlobalConfigForTests(options: ConfigLoaderOptions = {}): GlobalConfig {
   return getGlobalConfig({
     ensureGlobalConfigFile: false,
     ...options,

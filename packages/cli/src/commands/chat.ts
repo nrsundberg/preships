@@ -4,12 +4,7 @@ import { join } from "node:path";
 import chalk from "chalk";
 import inquirer from "inquirer";
 
-import {
-  getGlobalConfig,
-  getRepoConfig,
-  getRepoPreshipsDir,
-  setGlobalConfig,
-} from "../config.js";
+import { getGlobalConfig, getRepoConfig, getRepoPreshipsDir, setGlobalConfig } from "../config.js";
 import {
   buildRoutingPlan,
   invokeWithRoutingPlan,
@@ -58,9 +53,7 @@ async function callOllamaChat(
   };
   if (candidate.provider === "cloud") {
     if (!apiKey) {
-      throw new Error(
-        "Cloud routing requires a credential. Run `preships login` first.",
-      );
+      throw new Error("Cloud routing requires a credential. Run `preships login` first.");
     }
     headers.authorization = `Bearer ${apiKey}`;
   }
@@ -97,9 +90,7 @@ async function callOllamaChat(
       output?: string;
     };
     const content =
-      payload.message?.content?.trim() ??
-      payload.content?.trim() ??
-      payload.output?.trim();
+      payload.message?.content?.trim() ?? payload.content?.trim() ?? payload.output?.trim();
     if (!content) {
       throw new Error("Model returned an empty response.");
     }
@@ -216,8 +207,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
       const execution = await invokeWithRoutingPlan(
         routingPlan,
         messages,
-        (candidate, routeMessages) =>
-          callOllamaChat(candidate, routeMessages, global.apiKey),
+        (candidate, routeMessages) => callOllamaChat(candidate, routeMessages, global.apiKey),
         true,
       );
       const reply = execution.content;

@@ -1,23 +1,10 @@
-import { Form, NavLink, Outlet, redirect } from "react-router";
+import { Form, NavLink, Outlet } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
-import { getConsoleSession } from "~/lib/auth.server";
-import { getConsoleAuthDbFromContext, resolveConsoleOrgContextFromSessionUser } from "~/lib/org-context.server";
+import { requireConsoleOrgContext } from "~/lib/route-auth.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
-  const session = await getConsoleSession(request);
-  if (!session) {
-    const url = new URL(request.url);
-    const redirectTo = `${url.pathname}${url.search}`;
-    throw redirect(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
-  }
-
-  const authDb = getConsoleAuthDbFromContext(context);
-  if (!authDb) {
-    throw new Response("Console auth DB is unavailable.", { status: 500 });
-  }
-
-  const orgContext = await resolveConsoleOrgContextFromSessionUser(authDb, session.user);
+  const { session, orgContext } = await requireConsoleOrgContext({ request, context });
 
   return {
     session,
@@ -32,7 +19,8 @@ export const meta: MetaFunction = () => [
   { title: "Console | Preships" },
   {
     name: "description",
-    content: "Preships Console workspace overview for projects, billing, usage, and account settings.",
+    content:
+      "Preships Console workspace overview for projects, billing, usage, and account settings.",
   },
 ];
 

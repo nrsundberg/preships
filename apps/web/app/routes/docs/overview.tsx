@@ -5,35 +5,25 @@ export default function DocsOverview() {
     <>
       <h1 className="text-3xl font-bold">Documentation</h1>
       <p className="mt-3 text-text-content">
-        Preships is an agent-agnostic QA runner for web applications. It runs
-        deterministic checks and produces reports for both humans and coding
-        agents.
+        Preships is an agent-agnostic QA runner for web applications. It runs deterministic checks
+        and produces reports for both humans and coding agents.
       </p>
 
       <h2 className="mt-10 text-xl font-semibold">Core Workflow</h2>
       <ol className="mt-3 list-inside list-decimal space-y-2 text-text-content">
         <li>
           Initialize a repository with{" "}
-          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">
-            preships init
-          </code>
+          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">preships init</code>
         </li>
         <li>
           Run checks with{" "}
-          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">
-            preships run
-          </code>{" "}
-          or watch with{" "}
-          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">
-            preships watch
-          </code>
+          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">preships run</code> or watch
+          with <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">preships watch</code>
         </li>
         <li>
           Review{" "}
-          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">
-            .preships/report.md
-          </code>{" "}
-          and fix failures before shipping
+          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">.preships/report.md</code> and
+          fix failures before shipping
         </li>
       </ol>
 
@@ -42,12 +32,8 @@ export default function DocsOverview() {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="px-3 py-2 text-left font-medium text-text-primary">
-                Mode
-              </th>
-              <th className="px-3 py-2 text-left font-medium text-text-primary">
-                What It Does
-              </th>
+              <th className="px-3 py-2 text-left font-medium text-text-primary">Mode</th>
+              <th className="px-3 py-2 text-left font-medium text-text-primary">What It Does</th>
             </tr>
           </thead>
           <tbody className="text-text-content">

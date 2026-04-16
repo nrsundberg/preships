@@ -28,15 +28,15 @@ function detectGpu(): string {
       const chipMatch = raw.match(/Chipset Model:\s*(.+)/);
       const vramMatch = raw.match(/VRAM.*?:\s*(.+)/);
       if (chipMatch) {
-        return vramMatch
-          ? `${chipMatch[1].trim()} (${vramMatch[1].trim()})`
-          : chipMatch[1].trim();
+        return vramMatch ? `${chipMatch[1].trim()} (${vramMatch[1].trim()})` : chipMatch[1].trim();
       }
     } else if (os === "linux") {
-      return execSync("lspci 2>/dev/null | grep -i vga", {
-        encoding: "utf8",
-        timeout: 5000,
-      }).trim() || "Unknown";
+      return (
+        execSync("lspci 2>/dev/null | grep -i vga", {
+          encoding: "utf8",
+          timeout: 5000,
+        }).trim() || "Unknown"
+      );
     }
   } catch {
     // detection failed
@@ -90,7 +90,7 @@ export function getSystemInfo(): SystemInfo {
     arch: arch(),
     cpuModel: cpu[0]?.model ?? "Unknown",
     cpuCores: cpu.length,
-    totalRamGb: Math.round((totalmem() / (1024 ** 3)) * 10) / 10,
+    totalRamGb: Math.round((totalmem() / 1024 ** 3) * 10) / 10,
     gpu: detectGpu(),
     ollamaInstalled: ollama.installed,
     ollamaVersion: ollama.version,
@@ -170,11 +170,7 @@ export function infoCommand(): void {
   );
 
   console.log(chalk.cyan("\n  Model Requirements (Ollama)\n"));
-  console.log(
-    chalk.dim(
-      "    Model                     Params   Min RAM   Best For",
-    ),
-  );
+  console.log(chalk.dim("    Model                     Params   Min RAM   Best For"));
   console.log(chalk.dim("    " + "─".repeat(72)));
 
   for (const m of MODEL_REQUIREMENTS) {
@@ -186,26 +182,14 @@ export function infoCommand(): void {
     console.log(`  ${indicator} ${name}${params}${ram}${m.recommended}`);
   }
 
-  const bestFit = [...MODEL_REQUIREMENTS]
-    .reverse()
-    .find((m) => info.totalRamGb >= m.minRamGb);
+  const bestFit = [...MODEL_REQUIREMENTS].reverse().find((m) => info.totalRamGb >= m.minRamGb);
 
   if (bestFit) {
-    console.log(
-      chalk.green(`\n  Recommended default: ${chalk.bold(bestFit.name)}`),
-    );
+    console.log(chalk.green(`\n  Recommended default: ${chalk.bold(bestFit.name)}`));
     console.log(chalk.dim(`  ${bestFit.notes}`));
   } else {
-    console.log(
-      chalk.yellow(
-        "\n  Your system may not have enough RAM for local models.",
-      ),
-    );
-    console.log(
-      chalk.dim(
-        "  Preships deterministic checks still work without a model.",
-      ),
-    );
+    console.log(chalk.yellow("\n  Your system may not have enough RAM for local models."));
+    console.log(chalk.dim("  Preships deterministic checks still work without a model."));
   }
 
   console.log();

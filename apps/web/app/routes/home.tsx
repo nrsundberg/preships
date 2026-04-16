@@ -6,8 +6,7 @@ export default function Home() {
       <div className="max-w-2xl text-center">
         <h1 className="text-5xl font-bold tracking-tight">Preships</h1>
         <p className="mt-4 text-lg text-text-muted">
-          Pre-ship QA agent for AI-assisted web development. Checks your UI
-          before you ship.
+          Pre-ship QA agent for AI-assisted web development. Checks your UI before you ship.
         </p>
         <div className="mt-3">
           <code className="rounded-md border border-border bg-code-bg px-3 py-1.5 text-sm text-accent">

@@ -28,7 +28,13 @@ test("selectWatchCheckTypes includes targeted builtins and custom checks", () =>
     ["apps/web/app/routes/home.tsx", "packages/cli/package.json"],
   );
 
-  assert.deepEqual(selection.checkTypes, ["accessibility", "styles", "console", "network", "custom-visual"]);
+  assert.deepEqual(selection.checkTypes, [
+    "accessibility",
+    "styles",
+    "console",
+    "network",
+    "custom-visual",
+  ]);
 });
 
 test("selectWatchCheckTypes treats package.json changes as runtime-impacting", () => {

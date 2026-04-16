@@ -1,7 +1,7 @@
 {
   "name": "preships-monorepo",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "description": "Monorepo for Preships CLI, docs, and admin app.",
   "workspaces": [
     "packages/*",
@@ -12,20 +12,38 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "dev:cli": "npm run dev --workspace preships",
     "dev:web": "npm run dev --workspace @preships/web",
-    "dev:console": "npm run dev --workspace @preships/console"
+    "dev:console": "npm run dev --workspace @preships/console",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt .",
+    "format:staged": "oxfmt --write",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "lint:staged": "oxlint --fix",
+    "precommit": "lint-staged",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "@react-router/dev": "^7.9.3"
-  },
-  "overrides": {
-    "esbuild": "0.27.3",
-    "@esbuild/darwin-arm64": "0.27.3",
-    "@esbuild/darwin-x64": "0.27.3"
-  },
-  "engines": {
-    "node": ">=20"
+    "@react-router/dev": "^7.9.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "oxfmt": "^0.45.0",
+    "oxlint": "^1.60.0"
   },
   "optionalDependencies": {
     "lightningcss-darwin-arm64": "^1.32.0"
+  },
+  "overrides": {
+    "@esbuild/darwin-arm64": "0.27.3",
+    "@esbuild/darwin-x64": "0.27.3",
+    "esbuild": "0.27.3"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": [
+      "npm run format:staged --",
+      "npm run lint:staged --"
+    ]
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

@@ -1,32 +1,30 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "preships-console",
-	"compatibility_date": "2026-04-15",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"main": "./workers/app.ts",
-	"assets": {
-		"directory": "./build/client"
-	},
-	"vars": {
-		"BETTER_AUTH_URL": "https://console.preships.io",
-		"GOOGLE_CLIENT_ID": "826060789750-fbu1fn1egm1i9u0i3pjp8ieq350bk0uq.apps.googleusercontent.com"
-	},
-	"d1_databases": [
-		{
-			"binding": "AUTH_DB",
-			"database_name": "preships-console-auth",
-			"database_id": "3b1869f7-1b61-443f-81df-d6c01c71260c"
-		}
-	],
-	"routes": [
-		{
-			"pattern": "console.preships.io",
-			"custom_domain": true
-		}
-	],
-	"observability": {
-		"enabled": true
-	}
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "preships-console",
+  "compatibility_date": "2026-04-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./workers/app.ts",
+  "assets": {
+    "directory": "./build/client",
+  },
+  "vars": {
+    "BETTER_AUTH_URL": "https://console.preships.io",
+    "GOOGLE_CLIENT_ID": "826060789750-fbu1fn1egm1i9u0i3pjp8ieq350bk0uq.apps.googleusercontent.com",
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "preships-console-auth",
+      "database_id": "3b1869f7-1b61-443f-81df-d6c01c71260c",
+    },
+  ],
+  "routes": [
+    {
+      "pattern": "console.preships.io",
+      "custom_domain": true,
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
 }

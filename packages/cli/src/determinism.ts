@@ -19,9 +19,7 @@ function normalizedSeverityRank(issue: CheckIssue): number {
 
 export function normalizeCheckTypes(checkTypes: string[]): string[] {
   const deduped = new Set(
-    checkTypes
-      .map((value) => value.trim().toLowerCase())
-      .filter((value) => value.length > 0),
+    checkTypes.map((value) => value.trim().toLowerCase()).filter((value) => value.length > 0),
   );
 
   return Array.from(deduped).sort((left, right) => {

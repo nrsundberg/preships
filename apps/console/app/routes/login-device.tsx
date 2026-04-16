@@ -1,12 +1,9 @@
-import { Form, Link, redirect, useActionData, useLoaderData } from "react-router";
+import { Form, Link, useActionData, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
-import { getConsoleSession } from "~/lib/auth.server";
+import { getConsoleAuthDbFromContext } from "~/lib/db.server";
 import { approveDeviceSession } from "~/lib/device-auth.server";
-
-type CloudflareEnv = {
-  AUTH_DB?: unknown;
-};
+import { requireConsoleSession } from "~/lib/route-auth.server";
 
 type LoaderData = {
   code: string;
@@ -25,35 +22,16 @@ export const meta: MetaFunction = () => [
   },
 ];
 
-function getAuthDbFromContext(context: unknown) {
-  const cloudflareContext =
-    typeof context === "object" && context !== null && "cloudflare" in context
-      ? (context.cloudflare as { env?: CloudflareEnv })
-      : undefined;
-
-  return cloudflareContext?.env?.AUTH_DB;
-}
-
 export async function loader({ request }: LoaderFunctionArgs) {
-  const session = await getConsoleSession(request);
+  await requireConsoleSession(request);
   const url = new URL(request.url);
   const code = (url.searchParams.get("code") ?? "").trim();
-
-  if (!session) {
-    const redirectTo = `${url.pathname}${url.search}`;
-    throw redirect(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
-  }
 
   return { code } satisfies LoaderData;
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
-  const session = await getConsoleSession(request);
-  if (!session) {
-    const url = new URL(request.url);
-    const redirectTo = `${url.pathname}${url.search}`;
-    throw redirect(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
-  }
+  await requireConsoleSession(request);
 
   const formData = await request.formData();
   const code = `${formData.get("code") ?? ""}`.trim();
@@ -64,7 +42,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     } satisfies ActionData;
   }
 
-  const authDb = getAuthDbFromContext(context);
+  const authDb = getConsoleAuthDbFromContext(context);
   if (!authDb) {
     return {
       status: "error",

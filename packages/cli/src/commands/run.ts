@@ -26,7 +26,8 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
   let runId: number | undefined;
 
   try {
-    const repo = storage.getRepo(repoPath) ??
+    const repo =
+      storage.getRepo(repoPath) ??
       ((): { id: number } => {
         const id = storage.registerRepo(repoPath, repoConfig.name, repoConfig.url);
         return { id };

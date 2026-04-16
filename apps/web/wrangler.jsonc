@@ -5,13 +5,13 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "./workers/app.ts",
   "assets": {
-    "directory": "./build/client"
+    "directory": "./build/client",
   },
   "routes": [
     { "pattern": "preships.io", "custom_domain": true },
-    { "pattern": "www.preships.io", "custom_domain": true }
+    { "pattern": "www.preships.io", "custom_domain": true },
   ],
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
 }

@@ -165,20 +165,18 @@ export function buildRoutingPlan(
 ): RoutingPlan {
   const trace: string[] = [];
   const requiredCapabilities = context.requiredCapabilities ?? ["chat"];
-  const maxCostTier = context.maxCostTier
-    ? COST_TIER_VALUES[context.maxCostTier]
-    : undefined;
+  const maxCostTier = context.maxCostTier ? COST_TIER_VALUES[context.maxCostTier] : undefined;
 
   const providerOrder = context.preferredProvider
     ? [
         context.preferredProvider,
-        ...getProviderOrder(config.provider).filter((provider) => provider !== context.preferredProvider),
+        ...getProviderOrder(config.provider).filter(
+          (provider) => provider !== context.preferredProvider,
+        ),
       ]
     : getProviderOrder(config.provider);
 
-  trace.push(
-    `Provider order: ${providerOrder.join(" -> ")} (base provider=${config.provider})`,
-  );
+  trace.push(`Provider order: ${providerOrder.join(" -> ")} (base provider=${config.provider})`);
   trace.push(`Required capabilities: ${requiredCapabilities.join(", ")}`);
 
   const candidates: RouteCandidate[] = [];
@@ -284,8 +282,10 @@ export async function invokeWithRoutingPlan(
   }
 
   const attemptSummary = attempts
-    .map((attempt) => `${attempt.candidate.provider}/${attempt.candidate.model}: ${attempt.error ?? "failed"}`)
+    .map(
+      (attempt) =>
+        `${attempt.candidate.provider}/${attempt.candidate.model}: ${attempt.error ?? "failed"}`,
+    )
     .join(" | ");
   throw new Error(`All routed model candidates failed. ${attemptSummary}`);
 }
-

@@ -33,9 +33,7 @@ export default function CliUsage() {
             {commands.map((cmd) => (
               <tr key={cmd.name} className="border-b border-border">
                 <td className="px-3 py-2">
-                  <code className="rounded bg-code-bg px-1 py-0.5 text-xs">
-                    {cmd.name}
-                  </code>
+                  <code className="rounded bg-code-bg px-1 py-0.5 text-xs">{cmd.name}</code>
                 </td>
                 <td className="px-3 py-2">{cmd.desc}</td>
               </tr>

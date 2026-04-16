@@ -93,7 +93,9 @@ class FakeDeviceDb {
               }
               return { token: row.token } as T;
             }
-            if (query.startsWith("SELECT expires_at FROM cli_device_sessions WHERE device_code = ?")) {
+            if (
+              query.startsWith("SELECT expires_at FROM cli_device_sessions WHERE device_code = ?")
+            ) {
               const [deviceCode] = values as [string];
               const row = db.sessions.get(deviceCode);
               if (!row) {

@@ -19,20 +19,14 @@ export default function GettingStarted() {
       <p className="mt-4 text-text-content">This creates:</p>
       <ul className="mt-2 list-inside list-disc space-y-1 text-text-content">
         <li>
-          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">
-            .preships/config.toml
-          </code>
+          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">.preships/config.toml</code>
         </li>
         <li>
-          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">
-            .preships/plan.md
-          </code>
+          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">.preships/plan.md</code>
         </li>
         <li>
-          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">
-            AGENTS.md
-          </code>{" "}
-          and Cursor rule hints
+          <code className="rounded bg-code-bg px-1.5 py-0.5 text-sm">AGENTS.md</code> and Cursor
+          rule hints
         </li>
       </ul>
 
@@ -48,10 +42,7 @@ export default function GettingStarted() {
 
       <div className="mt-4 rounded-lg border border-border border-l-accent border-l-[3px] bg-[#131a27] px-3 py-2.5 text-sm text-text-content">
         Watch mode debounces changes and creates updated reports in{" "}
-        <code className="rounded bg-code-bg px-1 py-0.5 text-xs">
-          .preships/report.md
-        </code>
-        .
+        <code className="rounded bg-code-bg px-1 py-0.5 text-xs">.preships/report.md</code>.
       </div>
     </>
   );

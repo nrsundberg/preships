@@ -266,9 +266,7 @@ export class Storage {
 
   getRepo(path: string): Repo | undefined {
     return this.runWithStorageError("fetch repository", () => {
-      return this.db.prepare("SELECT * FROM repos WHERE path = ?").get(path) as
-        | Repo
-        | undefined;
+      return this.db.prepare("SELECT * FROM repos WHERE path = ?").get(path) as Repo | undefined;
     });
   }
 
@@ -280,9 +278,7 @@ export class Storage {
 
   updateLastCheckedCommit(repoId: number, commit: string): void {
     this.runWithStorageError("update repository commit", () => {
-      this.db
-        .prepare("UPDATE repos SET last_checked_commit = ? WHERE id = ?")
-        .run(commit, repoId);
+      this.db.prepare("UPDATE repos SET last_checked_commit = ? WHERE id = ?").run(commit, repoId);
     });
   }
 
@@ -319,18 +315,14 @@ export class Storage {
 
   getRun(runId: number): Run | undefined {
     return this.runWithStorageError("fetch run", () => {
-      return this.db.prepare("SELECT * FROM runs WHERE id = ?").get(runId) as
-        | Run
-        | undefined;
+      return this.db.prepare("SELECT * FROM runs WHERE id = ?").get(runId) as Run | undefined;
     });
   }
 
   getRecentRuns(repoId: number, limit: number = 20): Run[] {
     return this.runWithStorageError("fetch recent runs", () => {
       return this.db
-        .prepare(
-          "SELECT * FROM runs WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?",
-        )
+        .prepare("SELECT * FROM runs WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?")
         .all(repoId, limit) as Run[];
     });
   }
@@ -353,8 +345,7 @@ export class Storage {
         `INSERT INTO check_results (run_id, check_type, target, status, message, details, model_used, tokens_used, cost_cents)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
-      const details =
-        result.details != null ? JSON.stringify(result.details) : null;
+      const details = result.details != null ? JSON.stringify(result.details) : null;
       return Number(
         stmt.run(
           result.runId,
@@ -381,11 +372,7 @@ export class Storage {
 
   // --- Learned Patterns ---
 
-  addPattern(
-    repoId: number | null,
-    type: string,
-    description: string,
-  ): number {
+  addPattern(repoId: number | null, type: string, description: string): number {
     return this.runWithStorageError("insert learned pattern", () => {
       const stmt = this.db.prepare(
         "INSERT INTO learned_patterns (repo_id, pattern_type, description) VALUES (?, ?, ?)",
@@ -408,9 +395,7 @@ export class Storage {
     return this.runWithStorageError("fetch learned patterns", () => {
       if (repoId === undefined || repoId === null) {
         return this.db
-          .prepare(
-            "SELECT * FROM learned_patterns ORDER BY frequency DESC, last_seen DESC",
-          )
+          .prepare("SELECT * FROM learned_patterns ORDER BY frequency DESC, last_seen DESC")
           .all() as LearnedPattern[];
       }
       return this.db
@@ -427,9 +412,7 @@ export class Storage {
 
   addFeedback(runId: number, type: string, value: string): number {
     return this.runWithStorageError("insert feedback", () => {
-      const stmt = this.db.prepare(
-        "INSERT INTO feedback (run_id, type, value) VALUES (?, ?, ?)",
-      );
+      const stmt = this.db.prepare("INSERT INTO feedback (run_id, type, value) VALUES (?, ?, ?)");
       return Number(stmt.run(runId, type, value).lastInsertRowid);
     });
   }
@@ -437,18 +420,14 @@ export class Storage {
   getUnsubmittedFeedback(): Feedback[] {
     return this.runWithStorageError("fetch unsubmitted feedback", () => {
       return this.db
-        .prepare(
-          "SELECT * FROM feedback WHERE submitted_to_cloud = 0 ORDER BY created_at",
-        )
+        .prepare("SELECT * FROM feedback WHERE submitted_to_cloud = 0 ORDER BY created_at")
         .all() as Feedback[];
     });
   }
 
   markFeedbackSubmitted(feedbackId: number): void {
     this.runWithStorageError("mark feedback as submitted", () => {
-      this.db
-        .prepare("UPDATE feedback SET submitted_to_cloud = 1 WHERE id = ?")
-        .run(feedbackId);
+      this.db.prepare("UPDATE feedback SET submitted_to_cloud = 1 WHERE id = ?").run(feedbackId);
     });
   }
 
@@ -493,8 +472,7 @@ export class Storage {
         params.push(since);
       }
 
-      const where =
-        conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
       return this.db
         .prepare(
@@ -521,8 +499,7 @@ export class Storage {
         params.push(since);
       }
 
-      const where =
-        conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
       const row = this.db
         .prepare(

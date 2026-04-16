@@ -76,7 +76,8 @@ async function parseErrorBody(response: Response): Promise<string> {
 
 export function createDeviceAuthClient(options: DeviceAuthClientOptions): DeviceAuthClient {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const sleep =
+    options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const now = options.now ?? (() => Date.now());
   const apiBase = normalizeApiUrl(options.apiUrl);
 
@@ -90,9 +91,7 @@ export function createDeviceAuthClient(options: DeviceAuthClientOptions): Device
       });
       if (!response.ok) {
         const body = await parseErrorBody(response);
-        throw new Error(
-          `Unable to start browser login (${response.status}): ${body}`,
-        );
+        throw new Error(`Unable to start browser login (${response.status}): ${body}`);
       }
 
       const payload = (await response.json()) as DeviceAuthStartResponse;
@@ -128,10 +127,8 @@ export function createDeviceAuthClient(options: DeviceAuthClientOptions): Device
       deviceCode: string,
       pollOptions: DeviceAuthPollOptions = {},
     ): Promise<string> {
-      const intervalSeconds =
-        pollOptions.intervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
-      const expiresInSeconds =
-        pollOptions.expiresInSeconds ?? DEFAULT_EXPIRY_SECONDS;
+      const intervalSeconds = pollOptions.intervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
+      const expiresInSeconds = pollOptions.expiresInSeconds ?? DEFAULT_EXPIRY_SECONDS;
       const deadline = now() + expiresInSeconds * 1000;
 
       while (now() < deadline) {
@@ -152,9 +149,7 @@ export function createDeviceAuthClient(options: DeviceAuthClientOptions): Device
         }
         if (!response.ok) {
           const body = await parseErrorBody(response);
-          throw new Error(
-            `Unable to finish browser login (${response.status}): ${body}`,
-          );
+          throw new Error(`Unable to finish browser login (${response.status}): ${body}`);
         }
 
         const payload = (await response.json()) as DeviceAuthTokenResponse;

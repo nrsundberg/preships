@@ -113,12 +113,7 @@ export const DEFAULT_BROWSER_FLOW: BrowserFlowDefinition = {
       type: "clickAny",
       target: {
         name: "primary navigation link",
-        selectors: [
-          "a[href*='docs']",
-          "a:has-text('Get Started')",
-          "a:has-text('Docs')",
-          "nav a",
-        ],
+        selectors: ["a[href*='docs']", "a:has-text('Get Started')", "a:has-text('Docs')", "nav a"],
         required: false,
       },
       postClickWaitFor: {
@@ -172,11 +167,7 @@ class PlaywrightPageAdapter implements AutomationPage {
   }
 }
 
-function logEvent(
-  events: string[],
-  message: string,
-  hooks?: BrowserAutomationHooks,
-): void {
+function logEvent(events: string[], message: string, hooks?: BrowserAutomationHooks): void {
   events.push(message);
   hooks?.onEvent?.(message);
 }
@@ -237,9 +228,7 @@ async function runStep(
       async () => {
         const matched = await resolveSelector(page, step.target, timeoutMs);
         if (!matched) {
-          throw new Error(
-            `No selector matched for "${step.target.name}" within ${timeoutMs}ms.`,
-          );
+          throw new Error(`No selector matched for "${step.target.name}" within ${timeoutMs}ms.`);
         }
         return matched;
       },
@@ -252,25 +241,16 @@ async function runStep(
 
   if (!selected) {
     if (step.target.required === false) {
-      logEvent(
-        events,
-        `Skipped optional step "${step.target.name}" (no selector matched).`,
-        hooks,
-      );
+      logEvent(events, `Skipped optional step "${step.target.name}" (no selector matched).`, hooks);
       return;
     }
-    throw new FlowExecutionError(
-      `Failed to locate required target "${step.target.name}".`,
-      [...step.target.selectors],
-    );
+    throw new FlowExecutionError(`Failed to locate required target "${step.target.name}".`, [
+      ...step.target.selectors,
+    ]);
   }
 
   usedSelectors.push(selected);
-  logEvent(
-    events,
-    `Matched selector for "${step.target.name}": ${selected}`,
-    hooks,
-  );
+  logEvent(events, `Matched selector for "${step.target.name}": ${selected}`, hooks);
 
   if (step.type === "clickAny") {
     await withRetry(

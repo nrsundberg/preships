@@ -13,10 +13,7 @@ import { watchCommand } from "./commands/watch.js";
 
 const program = new Command();
 
-program
-  .name("preships")
-  .description("Pre-ship QA agent for web applications.")
-  .version("0.1.0");
+program.name("preships").description("Pre-ship QA agent for web applications.").version("0.1.0");
 
 program
   .command("init")

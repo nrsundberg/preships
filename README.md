@@ -107,6 +107,7 @@ now includes an explicit `entry.server.tsx` for Cloudflare Worker SSR.
 ## Current Stage
 
 Scaffolded with:
+
 - CLI command framework (init, run, watch, report, status, info, chat, config, login)
 - Global/repo config management (TOML)
 - SQLite storage layer (runs, checks, patterns, feedback, token usage)

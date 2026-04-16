@@ -34,4 +34,3 @@ test("completionCommand throws on unsupported shell", () => {
     /Unsupported shell "powershell"\. Supported shells: bash, zsh, fish\./,
   );
 });
-

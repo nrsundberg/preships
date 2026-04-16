@@ -1,9 +1,9 @@
 {
   "name": "@preships/console",
-  "private": true,
   "version": "0.1.0",
-  "type": "module",
+  "private": true,
   "description": "Preships admin console at console.preships.io (React Router v7 on Cloudflare Workers + D1).",
+  "type": "module",
   "scripts": {
     "dev": "npm exec -- react-router dev",
     "build": "npm exec -- react-router build",

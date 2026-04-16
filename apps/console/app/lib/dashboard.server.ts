@@ -1,19 +1,16 @@
-import type { ConsoleSession } from "~/lib/auth.server";
+import type { ConsoleOrg } from "~/lib/org-context.server";
+import { resolveCurrentOrg, type CurrentOrg } from "~/lib/current-org.server";
+import type { D1DatabaseLike } from "~/lib/db.server";
+import { queryAll, queryFirst } from "~/lib/db.server";
 
-export type DashboardPlanTier = "free";
-
-export type CurrentOrg = {
-  orgId: string;
-  name: string;
-  role: "member" | "owner";
-};
+export type DashboardPlanTier = string;
 
 export type PlanTierInfo = {
   tier: DashboardPlanTier;
-  status: "active";
+  status: "active" | "trialing";
 };
 
-export type RecentActivityKind = "run.succeeded" | "run.failed" | "api_key.created" | "alert.created";
+export type RecentActivityKind = string;
 
 export type RecentActivityItem = {
   id: string;
@@ -32,6 +29,7 @@ export type UsageSummary = {
   tokens: number;
   runs: number;
   models: number;
+  hasData: boolean;
 };
 
 export type DashboardData = {
@@ -41,99 +39,100 @@ export type DashboardData = {
   usageSummary: UsageSummary;
 };
 
-type OrgQuery = {
-  /**
-   * Optional org identifier to support future org-aware queries.
-   * When omitted, the dashboard will derive an org context from the authenticated session.
-   */
-  orgId?: string | null;
+type ActivityRow = {
+  id: string;
+  event_kind: string;
+  target_type: string | null;
+  target_id: string | null;
+  message: string;
+  occurred_at: string | null;
 };
 
-type OrgContext = {
-  orgId: string;
-  name: string;
-  role: CurrentOrg["role"];
+type UsageSummaryRow = {
+  period_label: string;
+  cost_usd: number;
+  tokens: number;
+  runs: number;
+  models: number;
 };
-
-function derivePlaceholderOrgContext(session: ConsoleSession): OrgContext {
-  const userId = session.user.id ?? "unknown";
-  const suffix = userId.slice(0, 8);
-  return {
-    orgId: `org_${suffix}`,
-    name: "Personal Workspace",
-    role: "owner",
-  };
+function toActivityItems(rows: ActivityRow[]): RecentActivityItem[] {
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.event_kind,
+    message: row.message,
+    occurredAtIso: row.occurred_at ?? new Date().toISOString(),
+  }));
 }
 
-function overrideOrgContextForQuery(context: OrgContext, orgId: string): OrgContext {
-  return {
-    ...context,
-    orgId,
-    name: `Organization ${orgId.slice(0, 6)}`,
-  };
-}
-
-async function getOrgContext(session: ConsoleSession, query: OrgQuery): Promise<OrgContext> {
-  const base = derivePlaceholderOrgContext(session);
-  if (query.orgId && query.orgId.trim()) {
-    return overrideOrgContextForQuery(base, query.orgId.trim());
-  }
-  return base;
+function toSafeNumber(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 export async function getDashboardData({
-  session,
-  orgId,
+  db,
+  org,
+  tier,
 }: {
-  session: ConsoleSession;
-  orgId?: string | null;
+  db: D1DatabaseLike;
+  org: ConsoleOrg;
+  tier: string;
 }): Promise<DashboardData> {
-  const org = await getOrgContext(session, { orgId });
-  const now = Date.now();
+  const currentOrg = resolveCurrentOrg(org);
+
+  const recentActivityRows = await queryAll<ActivityRow>(
+    db,
+    [
+      "SELECT id, event_kind, target_type, target_id,",
+      "  CASE",
+      "    WHEN target_type IS NOT NULL THEN event_kind || ' · ' || target_type",
+      "    ELSE event_kind",
+      "  END AS message,",
+      "  occurred_at",
+      "FROM activity_events",
+      "WHERE organization_id = ?",
+      "ORDER BY occurred_at DESC",
+      "LIMIT 12",
+    ].join(" "),
+    [org.id],
+  );
+
+  const usageSummaryRow = await queryFirst<UsageSummaryRow>(
+    db,
+    [
+      "SELECT",
+      "  COALESCE(MAX(strftime('%Y-%m', usage_date)), 'this-month') AS period_label,",
+      "  COALESCE(CAST(SUM(cost_cents) AS FLOAT) / 100.0, 0) AS cost_usd,",
+      "  COALESCE(SUM(model_token_count), 0) AS tokens,",
+      "  COALESCE(SUM(run_count), 0) AS runs,",
+      "  COALESCE(MAX(model_count), 0) AS models",
+      "FROM org_usage_daily",
+      "WHERE organization_id = ?",
+    ].join(" "),
+    [org.id],
+  );
 
   const recentActivity: RecentActivity = {
-    items: [
-      {
-        id: "activity_run_succeeded_1",
-        kind: "run.succeeded",
-        message: "Run succeeded: QA regression suite",
-        occurredAtIso: new Date(now - 1000 * 60 * 18).toISOString(),
-      },
-      {
-        id: "activity_api_key_created_1",
-        kind: "api_key.created",
-        message: "Created a CLI API key",
-        occurredAtIso: new Date(now - 1000 * 60 * 60 * 6).toISOString(),
-      },
-      {
-        id: "activity_alert_created_1",
-        kind: "alert.created",
-        message: "Added an alerts threshold (usage)",
-        occurredAtIso: new Date(now - 1000 * 60 * 60 * 26).toISOString(),
-      },
-      {
-        id: "activity_run_failed_1",
-        kind: "run.failed",
-        message: "Run failed: Response schema mismatch",
-        occurredAtIso: new Date(now - 1000 * 60 * 60 * 42).toISOString(),
-      },
-    ],
+    items: toActivityItems(recentActivityRows),
   };
+  const usageHasData =
+    toSafeNumber(usageSummaryRow?.runs) > 0 ||
+    toSafeNumber(usageSummaryRow?.tokens) > 0 ||
+    toSafeNumber(usageSummaryRow?.cost_usd) > 0;
 
   return {
-    currentOrg: org,
+    currentOrg,
     planTier: {
-      tier: "free",
+      tier,
       status: "active",
     },
     recentActivity,
     usageSummary: {
-      periodLabel: "This month",
-      costUsd: 0,
-      tokens: 1254300,
-      runs: 42,
-      models: 3,
+      periodLabel: usageSummaryRow?.period_label ?? "This month",
+      costUsd: toSafeNumber(usageSummaryRow?.cost_usd),
+      tokens: toSafeNumber(usageSummaryRow?.tokens),
+      runs: toSafeNumber(usageSummaryRow?.runs),
+      models: toSafeNumber(usageSummaryRow?.models),
+      hasData: usageHasData,
     },
   };
 }
-

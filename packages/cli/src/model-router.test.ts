@@ -22,9 +22,7 @@ test("buildRoutingPlan applies capability and cost filters deterministically", (
   assert.equal(plan.selected.model, "llama3.2:11b-vision");
   assert.equal(plan.selected.provider, "local");
   assert.equal(plan.candidates[0].model, "llama3.2:11b-vision");
-  assert.ok(
-    plan.trace.some((line) => line.includes("Required capabilities: chat, vision")),
-  );
+  assert.ok(plan.trace.some((line) => line.includes("Required capabilities: chat, vision")));
 });
 
 test("buildRoutingPlan respects preferred provider and low-cost ceiling", () => {
@@ -71,4 +69,3 @@ test("invokeWithRoutingPlan falls back after primary failure", async () => {
   assert.equal(result.attempts[0]?.status, "failed");
   assert.equal(result.attempts[1]?.status, "success");
 });
-

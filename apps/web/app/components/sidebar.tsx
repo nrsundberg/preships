@@ -53,9 +53,7 @@ export function Sidebar() {
       ))}
 
       <div className="mt-6 border-t border-border pt-5">
-        <div className="mb-2 text-xs uppercase tracking-wider text-text-muted">
-          Console
-        </div>
+        <div className="mb-2 text-xs uppercase tracking-wider text-text-muted">Console</div>
         <a
           href="https://console.preships.io/login"
           className="my-0.5 block rounded-lg border border-border px-2.5 py-2 text-sm text-text-content no-underline transition-colors hover:bg-panel-soft"

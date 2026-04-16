@@ -86,8 +86,7 @@ describe("Storage", () => {
       },
       (error: unknown) => {
         return (
-          error instanceof StorageError &&
-          error.message.includes("Failed to open SQLite database")
+          error instanceof StorageError && error.message.includes("Failed to open SQLite database")
         );
       },
     );

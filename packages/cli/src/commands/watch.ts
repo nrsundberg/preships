@@ -7,14 +7,7 @@ import { getRepoConfig } from "../config.js";
 import { normalizeCheckTypes } from "../determinism.js";
 import { runCommand } from "./run.js";
 
-const WATCH_PATTERNS = [
-  "**/*.ts",
-  "**/*.tsx",
-  "**/*.js",
-  "**/*.jsx",
-  "**/*.css",
-  "**/*.html",
-];
+const WATCH_PATTERNS = ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.css", "**/*.html"];
 
 const BUILTIN_CHECK_TYPES = new Set([
   "lighthouse",
@@ -24,15 +17,7 @@ const BUILTIN_CHECK_TYPES = new Set([
   "network",
 ]);
 
-const DOC_EXTENSIONS = new Set([
-  ".md",
-  ".mdx",
-  ".txt",
-  ".json",
-  ".yaml",
-  ".yml",
-  ".toml",
-]);
+const DOC_EXTENSIONS = new Set([".md", ".mdx", ".txt", ".json", ".yaml", ".yml", ".toml"]);
 
 function extensionFor(filePath: string): string {
   const dot = filePath.lastIndexOf(".");
@@ -86,7 +71,9 @@ export function selectWatchCheckTypes(
 ): WatchCheckSelection {
   const normalizedConfigured = normalizeCheckTypes(configuredCheckTypes);
   const customChecks = normalizedConfigured.filter((type) => !BUILTIN_CHECK_TYPES.has(type));
-  const uniqueChanged = Array.from(new Set(changedFiles.map((value) => value.trim()).filter(Boolean)));
+  const uniqueChanged = Array.from(
+    new Set(changedFiles.map((value) => value.trim()).filter(Boolean)),
+  );
 
   if (uniqueChanged.length === 0) {
     return {

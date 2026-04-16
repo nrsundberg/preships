@@ -44,9 +44,7 @@ function toIsoDate(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
 }
 
-export async function createDeviceSession(
-  db: DeviceAuthDatabase,
-): Promise<{
+export async function createDeviceSession(db: DeviceAuthDatabase): Promise<{
   deviceCode: string;
   intervalSeconds: number;
   expiresInSeconds: number;

@@ -22,7 +22,9 @@ async function handleCliDeviceRequest(request: Request, env: WorkerEnv): Promise
   const url = new URL(request.url);
 
   if (request.method === "POST" && url.pathname === "/api/v1/cli/auth/device") {
-    const session = await createDeviceSession(env.AUTH_DB as Parameters<typeof createDeviceSession>[0]);
+    const session = await createDeviceSession(
+      env.AUTH_DB as Parameters<typeof createDeviceSession>[0],
+    );
     const loginUrl = new URL("/login/device", url.origin);
     loginUrl.searchParams.set("code", session.deviceCode);
 
@@ -93,7 +95,10 @@ export default {
     (context as { cloudflare?: unknown }).cloudflare = { env, ctx };
 
     const serverMode = env.ENVIRONMENT === "development" ? "development" : "production";
-    return createRequestHandler(buildImport, serverMode)(request, context as unknown as AppLoadContext);
+    return createRequestHandler(buildImport, serverMode)(
+      request,
+      context as unknown as AppLoadContext,
+    );
   },
 } satisfies {
   fetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response>;

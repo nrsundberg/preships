@@ -1,19 +1,8 @@
 import type { ConsoleSessionUser } from "./auth.server";
 import { getConsoleSession } from "./auth.server";
+import { getConsoleAuthDbFromContext, type D1DatabaseLike } from "./db.server";
 
-type CloudflareEnv = {
-  AUTH_DB?: unknown;
-};
-
-type D1DatabaseLike = {
-  prepare(query: string): {
-    bind(...values: unknown[]): {
-      run(): Promise<{ success: boolean }>;
-      first<T = unknown>(): Promise<T | null>;
-      all<T = unknown>(): Promise<T[]>;
-    };
-  };
-};
+export { getConsoleAuthDbFromContext } from "./db.server";
 
 export type ConsoleOrgType = "personal" | "team";
 
@@ -27,18 +16,8 @@ export type ConsoleOrg = {
 export type ConsoleOrgContext = {
   org: ConsoleOrg;
   tier: string;
+  membershipRole: "owner" | "member";
 };
-
-export function getConsoleAuthDbFromContext(context: unknown): D1DatabaseLike | null {
-  const cloudflareContext =
-    typeof context === "object" && context !== null && "cloudflare" in context
-      ? (context.cloudflare as { env?: CloudflareEnv })
-      : undefined;
-
-  const authDb = cloudflareContext?.env?.AUTH_DB;
-  if (!authDb || typeof authDb !== "object") return null;
-  return authDb as D1DatabaseLike;
-}
 
 function randomBase64Url(bytes: number): string {
   const value = new Uint8Array(bytes);
@@ -75,9 +54,7 @@ async function ensureMembershipForUser(
   params: { organizationId: string; userId: string },
 ): Promise<void> {
   const existing = await db
-    .prepare(
-      "SELECT id FROM memberships WHERE organization_id = ? AND user_id = ? LIMIT 1",
-    )
+    .prepare("SELECT id FROM memberships WHERE organization_id = ? AND user_id = ? LIMIT 1")
     .bind(params.organizationId, params.userId)
     .first<{ id: string }>();
 
@@ -92,11 +69,48 @@ async function ensureMembershipForUser(
     .run();
 }
 
+async function getOrgFromMembership(
+  authDb: D1DatabaseLike,
+  params: { organizationId: string; userId: string },
+): Promise<(ConsoleOrg & { membershipRole: "owner" | "member" }) | null> {
+  return authDb
+    .prepare(
+      [
+        "SELECT o.id, o.name, o.type, o.tier,",
+        "CASE WHEN m.role = 'owner' THEN 'owner' ELSE 'member' END AS membershipRole",
+        "FROM memberships m",
+        "INNER JOIN organizations o ON o.id = m.organization_id",
+        "WHERE m.organization_id = ? AND m.user_id = ?",
+        "LIMIT 1",
+      ].join(" "),
+    )
+    .bind(params.organizationId, params.userId)
+    .first<ConsoleOrg & { membershipRole: "owner" | "member" }>();
+}
+
 export async function resolveConsoleOrgContextFromSessionUser(
   authDb: D1DatabaseLike,
   user: ConsoleSessionUser,
+  options: { requestedOrgId?: string | null } = {},
 ): Promise<ConsoleOrgContext> {
   const userId = user.id;
+  const requestedOrgId = options.requestedOrgId?.trim() ?? "";
+
+  if (requestedOrgId) {
+    const requestedOrg = await getOrgFromMembership(authDb, {
+      organizationId: requestedOrgId,
+      userId,
+    });
+    if (!requestedOrg) {
+      throw new Error("User does not have access to the requested organization.");
+    }
+
+    return {
+      org: requestedOrg,
+      tier: requestedOrg.tier,
+      membershipRole: requestedOrg.membershipRole,
+    };
+  }
 
   // Fast path: existing default personal org.
   const existingOrg = await authDb
@@ -108,7 +122,7 @@ export async function resolveConsoleOrgContextFromSessionUser(
 
   if (existingOrg) {
     await ensureMembershipForUser(authDb, { organizationId: existingOrg.id, userId });
-    return { org: existingOrg, tier: existingOrg.tier };
+    return { org: existingOrg, tier: existingOrg.tier, membershipRole: "owner" };
   }
 
   // Slow path: create on first access.
@@ -149,11 +163,14 @@ export async function resolveConsoleOrgContextFromSessionUser(
   }
 
   await ensureMembershipForUser(authDb, { organizationId: createdOrg.id, userId });
-  return { org: createdOrg, tier: createdOrg.tier };
+  return { org: createdOrg, tier: createdOrg.tier, membershipRole: "owner" };
 }
 
 // Convenience helper for places that only have access to the request+context.
-export async function getConsoleOrgContext(request: Request, context: unknown): Promise<ConsoleOrgContext> {
+export async function getConsoleOrgContext(
+  request: Request,
+  context: unknown,
+): Promise<ConsoleOrgContext> {
   const session = await getConsoleSession(request);
   if (!session) {
     throw new Error("Missing console session.");
@@ -166,4 +183,3 @@ export async function getConsoleOrgContext(request: Request, context: unknown): 
 
   return resolveConsoleOrgContextFromSessionUser(authDb, session.user);
 }
-
