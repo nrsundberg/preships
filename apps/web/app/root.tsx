@@ -6,9 +6,18 @@ import {
   ScrollRestoration,
   isRouteErrorResponse,
 } from "react-router";
+import type { LinksFunction } from "react-router";
 import type { ReactNode } from "react";
 
 import "./styles.css";
+
+export const links: LinksFunction = () => [
+  { rel: "icon", href: "/favicon.ico", sizes: "any" },
+  { rel: "icon", type: "image/png", href: "/icons/favicon-32x32.png", sizes: "32x32" },
+  { rel: "icon", type: "image/png", href: "/icons/favicon-16x16.png", sizes: "16x16" },
+  { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png", sizes: "180x180" },
+  { rel: "manifest", href: "/manifest.webmanifest" },
+];
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
