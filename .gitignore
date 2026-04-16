@@ -6,3 +6,5 @@ dist/
 apps/admin/.wrangler/
 apps/admin/build/
 apps/admin/.react-router/
+apps/console/build/
+apps/console/.react-router/
