@@ -51,6 +51,11 @@ jobs:
           npm init -y
           npm install "${{ steps.pack.outputs.package }}"
 
+      - name: Install Playwright browser binaries
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          npx playwright install chromium
+
       - name: Run init and deterministic smoke
         run: |
           cd "$RUNNER_TEMP/smoke-project"
@@ -104,6 +109,11 @@ jobs:
           npm init -y
           npm install "${{ steps.pack.outputs.package }}"
 
+      - name: Install Playwright browser binaries
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          npx playwright install chromium
+
       - name: Run init and deterministic smoke
         run: |
           cd "$RUNNER_TEMP/smoke-project"
@@ -152,6 +162,11 @@ jobs:
           cd "$RUNNER_TEMP/smoke-project"
           npm init -y
           npm install "${{ steps.pack.outputs.package }}"
+
+      - name: Install Playwright browser binaries
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          npx playwright install chromium
 
       - name: Start local app, run smoke
         env:
