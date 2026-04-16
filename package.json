@@ -1,0 +1,20 @@
+{
+  "name": "preships-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo for Preships CLI, docs, and admin app.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:cli": "npm run dev --workspace @preships/cli",
+    "dev:admin": "npm run dev --workspace @preships/admin",
+    "dev:docs": "npm run dev --workspace @preships/docs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

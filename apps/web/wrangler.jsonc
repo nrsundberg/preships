@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "preships-web",
+  "compatibility_date": "2026-04-15",
+  "main": "./build/server/index.js",
+  "assets": {
+    "directory": "./build/client"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
