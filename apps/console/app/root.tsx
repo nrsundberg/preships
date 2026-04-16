@@ -9,7 +9,7 @@ import {
 import type { ReactNode } from "react";
 import type { MetaFunction } from "react-router";
 
-import "./styles.css";
+import stylesHref from "./styles.css?url";
 
 export const meta: MetaFunction = () => [
   { title: "Preships Console" },
@@ -19,6 +19,10 @@ export const meta: MetaFunction = () => [
       "Preships Console for authentication, workspace settings, billing, and usage management.",
   },
 ];
+
+export function links() {
+  return [{ rel: "stylesheet", href: stylesHref }];
+}
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
@@ -48,7 +52,15 @@ export function ErrorBoundary({ error }: { error: unknown }) {
 
   if (isRouteErrorResponse(error)) {
     message = `${error.status} ${error.statusText}`;
-    details = error.data || details;
+    if (typeof error.data === "string") {
+      details = error.data;
+    } else if (error.data != null) {
+      try {
+        details = JSON.stringify(error.data, null, 2);
+      } catch {
+        details = String(error.data);
+      }
+    }
   } else if (error instanceof Error) {
     message = error.message;
     details = error.stack ?? details;

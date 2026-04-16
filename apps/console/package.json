@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "npm exec -- react-router dev",
     "build": "npm exec -- react-router build",
-    "typecheck": "npm exec -- react-router typegen && tsc --noEmit && tsc -p workers/tsconfig.json --noEmit",
+    "typecheck": "npm exec -- react-router typegen && node scripts/react-router-type-shims.mjs && tsc --noEmit && tsc -p workers/tsconfig.json --noEmit",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

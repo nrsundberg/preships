@@ -2,7 +2,6 @@ import { redirect, useLoaderData } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
 import {
-  formatCompactInt,
   getBillingModelPlaceholder,
   getOrgNamePlaceholder,
   getPlanTierForOrg,
@@ -37,6 +36,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function BillingRoute() {
   const billing = useLoaderData<typeof loader>();
   const { limits, org, plan, stripe, links } = billing;
+
+  function formatCompactInt(value: number): string {
+    // Client-safe display helper. Kept local to avoid importing server-only modules in the client bundle.
+    return new Intl.NumberFormat(undefined, {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(value);
+  }
 
   return (
     <main className="rounded-xl border border-border bg-panel p-6">
