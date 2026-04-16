@@ -7,6 +7,9 @@
   "assets": {
     "directory": "./build/client"
   },
+  "routes": [
+    { "pattern": "console.preships.io", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true
   }
