@@ -41,7 +41,7 @@ test("buildReportDocument normalizes and sorts report data deterministically", (
     },
   ];
 
-  const document = buildReportDocument(summary, checks, generatedAt);
+  const document = buildReportDocument(summary, checks as any, generatedAt);
 
   assert.deepEqual(document.summary, {
     status: "passed",
