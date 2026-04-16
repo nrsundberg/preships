@@ -7,17 +7,20 @@
   "scripts": {
     "dev": "npm exec -- react-router dev",
     "build": "npm exec -- react-router build",
-    "typecheck": "npm exec -- react-router typegen && tsc --noEmit",
+    "typecheck": "npm exec -- react-router typegen && tsc --noEmit && tsc -p workers/tsconfig.json --noEmit",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@react-router/node": "^7.9.3",
+    "better-auth": "^1.6.4",
+    "drizzle-orm": "^0.45.2",
     "isbot": "^5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router": "^7.9.3"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260416.1",
     "@react-router/dev": "^7.9.3",
     "@tailwindcss/node": "^4.2.2",
     "@tailwindcss/vite": "^4.2.2",

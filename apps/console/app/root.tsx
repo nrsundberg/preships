@@ -7,8 +7,18 @@ import {
   isRouteErrorResponse,
 } from "react-router";
 import type { ReactNode } from "react";
+import type { MetaFunction } from "react-router";
 
 import "./styles.css";
+
+export const meta: MetaFunction = () => [
+  { title: "Preships Console" },
+  {
+    name: "description",
+    content:
+      "Preships Console for authentication, workspace settings, billing, and usage management.",
+  },
+];
 
 export function Layout({ children }: { children: ReactNode }) {
   return (

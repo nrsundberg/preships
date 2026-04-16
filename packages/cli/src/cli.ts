@@ -75,11 +75,11 @@ config
 
 program
   .command("login")
-  .description("Configure cloud API key.")
-  .requiredOption("--api-key <key>", "Preships API key")
+  .description("Log in to Preships cloud (browser or API key).")
+  .option("--api-key <key>", "Preships API key")
   .option("--api-url <url>", "Cloud API URL")
-  .action((options: { apiKey: string; apiUrl?: string }) => {
-    loginCommand({
+  .action(async (options: { apiKey?: string; apiUrl?: string }) => {
+    await loginCommand({
       apiKey: options.apiKey,
       apiUrl: options.apiUrl,
     });

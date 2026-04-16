@@ -8,7 +8,7 @@ export default function CliUsage() {
     { name: "info", desc: "Show system specs, model requirements, and dependency status." },
     { name: "chat", desc: "Interactive chat to refine repo goals and settings." },
     { name: "config", desc: "Read or set global Preships configuration." },
-    { name: "login", desc: "Configure cloud API key." },
+    { name: "login", desc: "Log in via browser flow or set an API key directly." },
   ];
 
   return (
@@ -55,7 +55,9 @@ preships config get`}</code>
 
       <h3 className="mt-8 text-lg font-medium">Cloud Login</h3>
       <pre className="mt-3 overflow-x-auto rounded-lg border border-border bg-code-bg p-3 text-sm">
-        <code>preships login --api-key psk_123 --api-url https://api.preships.io</code>
+        <code>{`preships login
+# or direct key mode:
+preships login --api-key psk_123 --api-url https://api.preships.io`}</code>
       </pre>
     </>
   );

@@ -35,7 +35,7 @@ preships report
 - `preships info` - show system specs, model requirements, dependency status
 - `preships chat` - interactive chat to tune goals/config
 - `preships config get|set` - manage global config
-- `preships login` - set cloud API key
+- `preships login` - log in to cloud with browser flow (or `--api-key`)
 - `preships completion <bash|zsh|fish>` - print a shell completion script
 
 ## Shell Completions
@@ -90,8 +90,19 @@ npm run dev:web       # develop public site
 npm run dev:console   # develop admin console
 ```
 
-React Router framework defaults are used in both apps, so there are no manual
-`entry.client.tsx` / `entry.server.tsx` files in `apps/web` or `apps/console`.
+React Router framework defaults are used for client entrypoints, and each app
+now includes an explicit `entry.server.tsx` for Cloudflare Worker SSR.
+
+## Console Auth Deploy Checklist
+
+- Create/configure a D1 database for `apps/console` auth/session data.
+- Set Wrangler secrets/vars for `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL`.
+- Configure OAuth provider credentials for Google and GitHub in Cloudflare env.
+- Apply `apps/console/migrations/0001_cli_device_sessions.sql` to the bound D1 database.
+- Deploy `@preships/console` and verify:
+  - `/login` + `/signup` routes
+  - `/login/device` approval flow from `preships login`
+  - protected routes redirect when signed out.
 
 ## Current Stage
 

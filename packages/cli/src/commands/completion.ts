@@ -105,7 +105,7 @@ _preships() {
     "info:Show system specs, model requirements, and dependency status"
     "chat:Chat with your configured model to refine repo goals/settings"
     "config:Manage global config"
-    "login:Configure cloud API key"
+    "login:Log in to Preships cloud"
     "completion:Generate shell completion script"
   )
 
@@ -161,7 +161,7 @@ complete -c preships -n "__fish_use_subcommand" -a status -d "Show repo and run 
 complete -c preships -n "__fish_use_subcommand" -a info -d "Show system specs, model requirements, and dependency status"
 complete -c preships -n "__fish_use_subcommand" -a chat -d "Chat with your configured model to refine repo goals/settings"
 complete -c preships -n "__fish_use_subcommand" -a config -d "Manage global config"
-complete -c preships -n "__fish_use_subcommand" -a login -d "Configure cloud API key"
+complete -c preships -n "__fish_use_subcommand" -a login -d "Log in to Preships cloud"
 complete -c preships -n "__fish_use_subcommand" -a completion -d "Generate shell completion script"
 
 complete -c preships -n "__fish_seen_subcommand_from init" -l url -d "Target dev server URL"
