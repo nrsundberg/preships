@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { Command } from "commander";
 
 import { configGetCommand, configSetCommand } from "./commands/config.js";
