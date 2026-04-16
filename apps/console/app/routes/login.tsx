@@ -1,6 +1,5 @@
 import { Form, Link, redirect, useSearchParams } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
-import type { MetaFunction } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
 import { getConsoleSession } from "~/lib/auth.server";
 
@@ -66,7 +65,7 @@ export default function LoginRoute() {
 
         <p className="mt-4 text-xs uppercase tracking-wide text-text-muted">Other sign-in methods</p>
         <div className="mt-2 space-y-2">
-          <Form action="/api/auth/sign-in/social" method="post">
+          <Form action="/api/auth/sign-in" method="post">
             <input type="hidden" name="provider" value="google" />
             <input type="hidden" name="callbackURL" value={redirectTo} />
             <button
@@ -86,7 +85,7 @@ export default function LoginRoute() {
               </span>
             </button>
           </Form>
-          <Form action="/api/auth/sign-in/social" method="post">
+          <Form action="/api/auth/sign-in" method="post">
             <input type="hidden" name="provider" value="github" />
             <input type="hidden" name="callbackURL" value={redirectTo} />
             <button

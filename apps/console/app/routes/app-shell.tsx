@@ -1,10 +1,10 @@
 import { Form, NavLink, Outlet, redirect } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
-import type { MetaFunction } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
 import { getConsoleSession } from "~/lib/auth.server";
+import { getConsoleAuthDbFromContext, resolveConsoleOrgContextFromSessionUser } from "~/lib/org-context.server";
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({ request, context }: LoaderFunctionArgs) {
   const session = await getConsoleSession(request);
   if (!session) {
     const url = new URL(request.url);
@@ -12,8 +12,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
     throw redirect(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
   }
 
-  return { session };
+  const authDb = getConsoleAuthDbFromContext(context);
+  if (!authDb) {
+    throw new Response("Console auth DB is unavailable.", { status: 500 });
+  }
+
+  const orgContext = await resolveConsoleOrgContextFromSessionUser(authDb, session.user);
+
+  return {
+    session,
+    org: orgContext.org,
+    tier: orgContext.tier,
+  };
 }
+
+export type AppShellLoaderData = Awaited<ReturnType<typeof loader>>;
 
 export const meta: MetaFunction = () => [
   { title: "Console | Preships" },

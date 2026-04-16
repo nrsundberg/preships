@@ -6,11 +6,12 @@
     "jsx": "react-jsx",
     "strict": true,
     "skipLibCheck": true,
+    "rootDirs": [".", "./.react-router/types"],
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
       "~/*": ["./app/*"]
     }
   },
-  "include": ["app", "react-router.config.ts", "vite.config.ts"]
+  "include": ["app", ".react-router/types/**/*", "react-router.config.ts", "vite.config.ts"]
 }

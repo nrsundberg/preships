@@ -1,6 +1,5 @@
 import { Form, Link, redirect, useActionData, useLoaderData } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import type { MetaFunction } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
 import { getConsoleSession } from "~/lib/auth.server";
 import { approveDeviceSession } from "~/lib/device-auth.server";
