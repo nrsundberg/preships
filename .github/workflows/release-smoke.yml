@@ -1,0 +1,202 @@
+name: Release Smoke
+
+on:
+  pull_request:
+    paths:
+      - "packages/cli/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/release-smoke.yml"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke-pr:
+    name: Smoke (PR, ubuntu)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CLI package
+        run: npm run build --workspace preships
+
+      - name: Pack CLI tarball
+        id: pack
+        run: |
+          PKG_FILE="$(npm pack --workspace preships --pack-destination "$RUNNER_TEMP")"
+          echo "package=$RUNNER_TEMP/$PKG_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Install tarball in temp project
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke-project"
+          cd "$RUNNER_TEMP/smoke-project"
+          npm init -y
+          npm install "${{ steps.pack.outputs.package }}"
+
+      - name: Run init and deterministic smoke
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          npx preships init --url "http://127.0.0.1:4173"
+          npx preships run
+
+      - name: Assert generated artifacts
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          test -f ".preships/config.toml"
+          test -f ".preships/plan.md"
+          test -f ".preships/report.md"
+          test -f ".preships/report.json"
+          test -f "AGENTS.md"
+
+  smoke-release:
+    name: Smoke (main/tag, ${{ matrix.os }})
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CLI package
+        run: npm run build --workspace preships
+
+      - name: Pack CLI tarball
+        id: pack
+        run: |
+          PKG_FILE="$(npm pack --workspace preships --pack-destination "$RUNNER_TEMP")"
+          echo "package=$RUNNER_TEMP/$PKG_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Install tarball in temp project
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke-project"
+          cd "$RUNNER_TEMP/smoke-project"
+          npm init -y
+          npm install "${{ steps.pack.outputs.package }}"
+
+      - name: Run init and deterministic smoke
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          npx preships init --url "http://127.0.0.1:4173"
+          npx preships run
+
+      - name: Assert generated artifacts
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          test -f ".preships/config.toml"
+          test -f ".preships/plan.md"
+          test -f ".preships/report.md"
+          test -f ".preships/report.json"
+          test -f "AGENTS.md"
+
+  smoke-nightly-localhost:
+    name: Smoke (nightly localhost, ubuntu)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CLI package
+        run: npm run build --workspace preships
+
+      - name: Pack CLI tarball
+        id: pack
+        run: |
+          PKG_FILE="$(npm pack --workspace preships --pack-destination "$RUNNER_TEMP")"
+          echo "package=$RUNNER_TEMP/$PKG_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Install tarball in temp project
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke-project"
+          cd "$RUNNER_TEMP/smoke-project"
+          npm init -y
+          npm install "${{ steps.pack.outputs.package }}"
+
+      - name: Start local app, run smoke
+        env:
+          LOCAL_PORT: "4317"
+        run: |
+          set -euo pipefail
+
+          APP_DIR="$RUNNER_TEMP/nightly-local-app"
+          mkdir -p "$APP_DIR"
+
+          cat > "$APP_DIR/server.mjs" <<'EOF'
+          import http from "node:http";
+
+          const port = Number(process.env.LOCAL_PORT || 4317);
+          const server = http.createServer((_, res) => {
+            res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+            res.end("<!doctype html><title>preships-nightly</title><h1>ok</h1>");
+          });
+
+          server.listen(port, "127.0.0.1", () => {
+            console.log(`listening on http://127.0.0.1:${port}`);
+          });
+          EOF
+
+          node "$APP_DIR/server.mjs" > "$APP_DIR/server.log" 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "http://127.0.0.1:${LOCAL_PORT}" > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error "http://127.0.0.1:${LOCAL_PORT}" > /dev/null
+
+          cd "$RUNNER_TEMP/smoke-project"
+          npx preships init --url "http://127.0.0.1:${LOCAL_PORT}"
+          npx preships run
+
+      - name: Assert generated artifacts
+        run: |
+          cd "$RUNNER_TEMP/smoke-project"
+          test -f ".preships/config.toml"
+          test -f ".preships/plan.md"
+          test -f ".preships/report.md"
+          test -f ".preships/report.json"
+          test -f "AGENTS.md"
