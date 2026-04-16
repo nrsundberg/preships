@@ -4,6 +4,7 @@ import { Command } from "commander";
 
 import { configGetCommand, configSetCommand } from "./commands/config.js";
 import { chatCommand } from "./commands/chat.js";
+import { completionCommand } from "./commands/completion.js";
 import { infoCommand } from "./commands/info.js";
 import { initCommand } from "./commands/init.js";
 import { loginCommand } from "./commands/login.js";
@@ -23,8 +24,9 @@ program
   .command("init")
   .description("Initialize Preships in the current repository.")
   .option("--url <url>", "Target dev server URL", "http://localhost:3000")
-  .action((options: { url: string }) => {
-    initCommand({ url: options.url });
+  .option("--skip-env-check", "Skip local environment checks and setup hints")
+  .action(async (options: { url: string; skipEnvCheck?: boolean }) => {
+    await initCommand({ url: options.url, skipEnvCheck: options.skipEnvCheck });
   });
 
 program
@@ -43,9 +45,10 @@ program
 
 program
   .command("report")
-  .description("Print latest report from .preships/report.md.")
-  .action(() => {
-    reportCommand();
+  .description("Print latest report from .preships/report.{md,json}.")
+  .option("--format <format>", "Report format: markdown|json", "markdown")
+  .action((options: { format: "markdown" | "json" }) => {
+    reportCommand({ format: options.format });
   });
 
 program
@@ -101,6 +104,14 @@ program
       model: options.model,
       endpoint: options.endpoint,
     });
+  });
+
+program
+  .command("completion")
+  .description("Generate shell completion script for bash, zsh, or fish.")
+  .argument("<shell>", "Shell type: bash|zsh|fish")
+  .action((shell: string) => {
+    completionCommand(shell);
   });
 
 void program.parseAsync(process.argv);

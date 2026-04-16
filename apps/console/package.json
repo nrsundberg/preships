@@ -5,21 +5,25 @@
   "type": "module",
   "description": "Preships admin console at console.preships.io (React Router v7 on Cloudflare Workers + D1).",
   "scripts": {
-    "dev": "react-router dev",
-    "build": "react-router build",
-    "typecheck": "echo \"Admin typecheck pending full wiring\"",
+    "dev": "npm exec -- react-router dev",
+    "build": "npm exec -- react-router build",
+    "typecheck": "npm exec -- react-router typegen && tsc --noEmit",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@react-router/node": "^7.9.3",
+    "isbot": "^5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router": "^7.9.3",
-    "@react-router/node": "^7.9.3"
+    "react-router": "^7.9.3"
   },
   "devDependencies": {
     "@react-router/dev": "^7.9.3",
+    "@tailwindcss/node": "^4.2.2",
+    "@tailwindcss/vite": "^4.2.2",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "tailwindcss": "^4.1.4",
     "typescript": "^5.9.3",
     "vite": "^7.1.10",
     "vite-tsconfig-paths": "^5.1.4",

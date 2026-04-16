@@ -3,7 +3,7 @@ import { cpus, totalmem, platform, arch } from "node:os";
 
 import chalk from "chalk";
 
-interface SystemInfo {
+export interface SystemInfo {
   os: string;
   arch: string;
   cpuModel: string;
@@ -82,7 +82,7 @@ function detectPlaywright(): boolean {
   }
 }
 
-function getSystemInfo(): SystemInfo {
+export function getSystemInfo(): SystemInfo {
   const cpu = cpus();
   const ollama = detectOllama();
   return {

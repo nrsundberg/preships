@@ -10,11 +10,22 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "dev:cli": "npm run dev --workspace @preships/cli",
-    "dev:admin": "npm run dev --workspace @preships/admin",
-    "dev:docs": "npm run dev --workspace @preships/docs"
+    "dev:cli": "npm run dev --workspace preships",
+    "dev:web": "npm run dev --workspace @preships/web",
+    "dev:console": "npm run dev --workspace @preships/console"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^7.9.3"
+  },
+  "overrides": {
+    "esbuild": "0.27.3",
+    "@esbuild/darwin-arm64": "0.27.3",
+    "@esbuild/darwin-x64": "0.27.3"
   },
   "engines": {
     "node": ">=20"
+  },
+  "optionalDependencies": {
+    "lightningcss-darwin-arm64": "^1.32.0"
   }
 }
