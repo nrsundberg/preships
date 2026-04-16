@@ -2,7 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "preships-console",
   "compatibility_date": "2026-04-15",
-  "main": "./build/server/index.js",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./workers/app.ts",
   "assets": {
     "directory": "./build/client"
   },
