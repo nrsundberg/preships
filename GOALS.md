@@ -73,8 +73,11 @@ Pre-ship checks. Before you ship.
 - Public GitHub repo for the CLI
 - README with clear getting-started, architecture overview, and contribution guide
 - GitHub Actions CI/CD for npm publishing
+- GitHub repo links to npm package page (`preships`) in README and release metadata
+- npm package metadata links back to GitHub repo and docs home
 - Issue templates, contributing guidelines
-- Separate private repo(s) for cloud API and admin app
+- Monorepo currently includes `apps/web` and `apps/console`; cloud/backend
+  components can remain private even if hosted separately
 
 ---
 
@@ -117,6 +120,59 @@ Pre-ship checks. Before you ship.
 | **Pro** | ~$20-30/mo | Managed model access with usage allowance, auto-escalation routing, dashboard, usage analytics. |
 | **Team** | Per-seat | Shared plan docs and learned patterns, centralized config, volume model pricing. |
 | **Enterprise** | License fee | Self-hosted admin app, airgapped support, custom model endpoints, priority support. |
+
+---
+
+## API & Docs Versioning
+
+- Public site (preships.io) docs should be versioned (e.g. `/docs/v1/...`) so major releases don't break existing users' reference material.
+- Console API endpoints (console.preships.io) must be versioned (`/api/v1/...`) since we can't guarantee when users will update their CLI. Old CLIs need to keep working against the API until formally deprecated.
+- CLI `preships info` command shows system specs, model requirements, and dependency status so users can self-diagnose.
+
+---
+
+## Proof-of-Concept: Connect Four Comparison Test
+
+### Goal
+Demonstrate that Preships measurably reduces human-in-the-loop time and improves output quality when an AI agent builds a real application.
+
+### The App
+A real-time Connect Four game built with `@tabledeck/game-room` (Cloudflare Durable Objects + Workers). Requirements:
+- Two players can join and play in real time
+- Good mobile browser experience with touch/drag-and-drop support
+- Accessible (508 compliant)
+- Strong visuals — polished, not prototype-looking
+- In-game chat between players
+- Responsive — works well on both desktop and mobile
+
+### Test Setup
+Two parallel builds using the same prompt and the same model (Sonnet 4.6 via API):
+
+**Run A — Agent alone (no Preships)**
+- Fresh repo, standard prompt, Sonnet 4.6 with API token usage
+- Human intervenes only when the agent is stuck or the result is visually broken
+- Track: tokens used, dollars spent, total time, number of human interventions, subjective quality score
+
+**Run B — Agent + Preships**
+- Fresh repo, same prompt, same model
+- Preships running in watch mode on the directory, feeding reports back
+- Human intervenes only when both the agent and Preships can't resolve an issue
+- Track: same metrics as Run A
+
+### What We're Measuring
+| Metric | Description |
+|--------|-------------|
+| Human-in-the-loop time | Minutes the human spent actively intervening |
+| Total tokens | Combined input + output tokens across all model calls |
+| Total cost ($) | API spend for the full build |
+| Time to usable product | Wall clock time from first prompt to "shippable" |
+| Visual quality score | Subjective 1-10 rating of the final product |
+| Accessibility score | Lighthouse accessibility audit score |
+| Number of human interventions | How many times a human had to step in |
+| Issues caught by Preships | (Run B only) List of issues Preships identified and the agent fixed |
+
+### Expected Outcome
+Run B should show fewer human interventions, higher accessibility scores, and better visual consistency, at the cost of slightly higher token usage (from Preships' own model calls). The net result should be a faster, higher-quality product with less human time.
 
 ---
 

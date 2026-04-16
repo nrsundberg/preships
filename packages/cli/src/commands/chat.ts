@@ -10,11 +10,12 @@ import {
   getRepoPreshipsDir,
   setGlobalConfig,
 } from "../config.js";
-
-interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
+import {
+  buildRoutingPlan,
+  invokeWithRoutingPlan,
+  type ChatMessage,
+  type RouteCandidate,
+} from "../model-router.js";
 
 interface ChatOptions {
   model?: string;
@@ -42,11 +43,10 @@ function appendChatLog(repoPath: string, line: string): void {
 }
 
 async function callOllamaChat(
-  endpoint: string,
-  model: string,
+  candidate: RouteCandidate,
   messages: ChatMessage[],
 ): Promise<string> {
-  const base = endpoint.replace(/\/+$/, "");
+  const base = candidate.endpoint.replace(/\/+$/, "");
   const url = `${base}/api/chat`;
   const response = await fetch(url, {
     method: "POST",
@@ -54,7 +54,7 @@ async function callOllamaChat(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model,
+      model: candidate.model,
       stream: false,
       messages,
     }),
@@ -89,8 +89,18 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
   const global = getGlobalConfig();
   const repo = getRepoConfig(repoPath);
 
-  const endpoint = options.endpoint ?? global.modelEndpoint;
-  const model = options.model ?? global.defaultModel;
+  const routingPlan = buildRoutingPlan(
+    global,
+    {
+      task: "chat",
+      requiredCapabilities: ["chat"],
+      preferredModel: options.model,
+      allowFallback: true,
+    },
+    {
+      endpointOverride: options.endpoint,
+    },
+  );
 
   const systemContext = [
     "You are the Preships repo assistant.",
@@ -106,7 +116,12 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
 
   const messages: ChatMessage[] = [{ role: "system", content: systemContext }];
 
-  console.log(chalk.green(`Preships chat started (${model} @ ${endpoint})`));
+  console.log(
+    chalk.green(
+      `Preships chat started (${routingPlan.selected.model} @ ${routingPlan.selected.endpoint})`,
+    ),
+  );
+  console.log(chalk.dim(`Routing policy: ${routingPlan.trace.join(" | ")}`));
   console.log(chalk.dim("Type /help for commands."));
 
   while (true) {
@@ -164,15 +179,29 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
     appendChatLog(repoPath, `## User (${new Date().toISOString()})\n${input}\n`);
 
     try {
-      const reply = await callOllamaChat(endpoint, model, messages);
+      const execution = await invokeWithRoutingPlan(
+        routingPlan,
+        messages,
+        callOllamaChat,
+        true,
+      );
+      const reply = execution.content;
       messages.push({ role: "assistant", content: reply });
       appendChatLog(repoPath, `## Preships\n${reply}\n`);
+      const attemptsSummary = execution.attempts
+        .map((attempt) =>
+          attempt.status === "success"
+            ? `${attempt.candidate.provider}/${attempt.candidate.model}:ok`
+            : `${attempt.candidate.provider}/${attempt.candidate.model}:failed`,
+        )
+        .join(", ");
+      console.log(chalk.dim(`Model route attempts: ${attemptsSummary}`));
       console.log(`\n${chalk.cyan("preships:")} ${reply}\n`);
     } catch (error) {
       console.log(chalk.red(error instanceof Error ? error.message : String(error)));
       console.log(
         chalk.dim(
-          "Tip: ensure Ollama is running and your model exists (e.g. ollama run qwen2.5-coder:7b).",
+          "Tip: ensure your routed endpoint is reachable and the selected model exists (e.g. ollama run qwen2.5-coder:7b).",
         ),
       );
     }
