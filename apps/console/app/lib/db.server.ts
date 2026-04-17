@@ -1,47 +1,36 @@
-type CloudflareEnv = {
-  AUTH_DB?: unknown;
+import { getPrisma } from "./prisma.server";
+
+type PrismaRawClientLike = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
 };
 
-type D1RunResult = {
-  success: boolean;
-};
-
-type D1PreparedStatementLike = {
-  bind(...values: unknown[]): {
-    run(): Promise<D1RunResult>;
-    first<T = unknown>(): Promise<T | null>;
-    all<T = unknown>(): Promise<T[]>;
+type LegacyPreparedClientLike = {
+  prepare(query: string): {
+    bind(...values: unknown[]): {
+      first<T = unknown>(): Promise<T | null>;
+      all?<T = unknown>(): Promise<T[] | { results: T[] }>;
+      run(): Promise<{ success: boolean }>;
+    };
   };
 };
 
-export type D1DatabaseLike = {
-  prepare(query: string): D1PreparedStatementLike;
-};
+export type D1DatabaseLike = PrismaRawClientLike | LegacyPreparedClientLike;
 
 export function getConsoleAuthDbFromContext(context: unknown): D1DatabaseLike | null {
-  const cloudflareContext =
-    typeof context === "object" && context !== null && "cloudflare" in context
-      ? (context.cloudflare as { env?: CloudflareEnv })
-      : undefined;
-
-  const authDb = cloudflareContext?.env?.AUTH_DB;
-  if (!authDb || typeof authDb !== "object") {
+  try {
+    return getPrisma(context);
+  } catch {
     return null;
   }
-
-  return authDb as D1DatabaseLike;
 }
 
 export function requireConsoleAuthDbFromContext(context: unknown): D1DatabaseLike {
-  const authDb = getConsoleAuthDbFromContext(context);
-  if (!authDb) {
+  const database = getConsoleAuthDbFromContext(context);
+  if (!database) {
     throw new Error("AUTH_DB is unavailable in Cloudflare context.");
   }
-  return authDb;
-}
-
-export function prepareQuery(db: D1DatabaseLike, query: string, bindings: readonly unknown[] = []) {
-  return db.prepare(query).bind(...bindings);
+  return database;
 }
 
 export async function queryFirst<T>(
@@ -49,7 +38,14 @@ export async function queryFirst<T>(
   query: string,
   bindings: readonly unknown[] = [],
 ): Promise<T | null> {
-  return prepareQuery(db, query, bindings).first<T>();
+  if ("$queryRawUnsafe" in db) {
+    const rows = (await db.$queryRawUnsafe<T[]>(query, ...bindings)) as T[];
+    return rows[0] ?? null;
+  }
+  return db
+    .prepare(query)
+    .bind(...bindings)
+    .first<T>();
 }
 
 export async function queryAll<T>(
@@ -57,13 +53,28 @@ export async function queryAll<T>(
   query: string,
   bindings: readonly unknown[] = [],
 ): Promise<T[]> {
-  return prepareQuery(db, query, bindings).all<T>();
+  if ("$queryRawUnsafe" in db) {
+    return (await db.$queryRawUnsafe<T[]>(query, ...bindings)) as T[];
+  }
+  const bound = db.prepare(query).bind(...bindings);
+  if (!bound.all) {
+    return [];
+  }
+  const rows = await bound.all<T>();
+  return Array.isArray(rows) ? rows : rows.results;
 }
 
 export async function executeQuery(
   db: D1DatabaseLike,
   query: string,
   bindings: readonly unknown[] = [],
-): Promise<D1RunResult> {
-  return prepareQuery(db, query, bindings).run();
+): Promise<{ success: boolean }> {
+  if ("$executeRawUnsafe" in db) {
+    await db.$executeRawUnsafe(query, ...bindings);
+    return { success: true };
+  }
+  return db
+    .prepare(query)
+    .bind(...bindings)
+    .run();
 }

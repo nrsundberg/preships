@@ -8,7 +8,7 @@
     "directory": "./build/client",
   },
   "vars": {
-    "BETTER_AUTH_URL": "https://console.preships.io/api/auth",
+    "BETTER_AUTH_URL": "https://console.preships.io",
     "GOOGLE_CLIENT_ID": "826060789750-fbu1fn1egm1i9u0i3pjp8ieq350bk0uq.apps.googleusercontent.com",
     // Optional. Prefer canonical Stripe price IDs (price_...) for checkout.
     "STRIPE_PRICE_PRO": "",

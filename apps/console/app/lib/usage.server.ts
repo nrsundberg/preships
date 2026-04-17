@@ -1,4 +1,4 @@
-import type { D1DatabaseLike } from "~/lib/db.server";
+import { executeQuery, queryAll, queryFirst, type D1DatabaseLike } from "~/lib/db.server";
 import type { ConsoleOrg } from "~/lib/org-context.server";
 import { resolveCurrentOrg, type CurrentOrg } from "~/lib/current-org.server";
 
@@ -129,12 +129,11 @@ async function ensureOrgQuotaRow(
   db: D1DatabaseLike,
   organizationId: string,
 ): Promise<FreeTierQuota> {
-  const existing = await db
-    .prepare(
-      "SELECT monthly_runs, monthly_tokens FROM org_usage_quotas WHERE organization_id = ? LIMIT 1",
-    )
-    .bind(organizationId)
-    .first<QuotaRow>();
+  const existing = await queryFirst<QuotaRow>(
+    db,
+    "SELECT monthly_runs, monthly_tokens FROM org_usage_quotas WHERE organization_id = ? LIMIT 1",
+    [organizationId],
+  );
 
   if (existing) {
     return {
@@ -143,23 +142,23 @@ async function ensureOrgQuotaRow(
     };
   }
 
-  const tier = await db
-    .prepare("SELECT tier FROM organizations WHERE id = ? LIMIT 1")
-    .bind(organizationId)
-    .first<OrgTierRow>();
+  const tier = await queryFirst<OrgTierRow>(
+    db,
+    "SELECT tier FROM organizations WHERE id = ? LIMIT 1",
+    [organizationId],
+  );
 
   const defaults = getDefaultQuotaByTier(tier?.tier ?? "free");
   const nowIso = new Date().toISOString();
 
-  await db
-    .prepare(
-      [
-        "INSERT INTO org_usage_quotas (organization_id, monthly_runs, monthly_tokens, created_at, updated_at)",
-        "VALUES (?, ?, ?, ?, ?)",
-      ].join(" "),
-    )
-    .bind(organizationId, defaults.monthlyRuns, defaults.monthlyTokens, nowIso, nowIso)
-    .run();
+  await executeQuery(
+    db,
+    [
+      "INSERT INTO org_usage_quotas (organization_id, monthly_runs, monthly_tokens, created_at, updated_at)",
+      "VALUES (?, ?, ?, ?, ?)",
+    ].join(" "),
+    [organizationId, defaults.monthlyRuns, defaults.monthlyTokens, nowIso, nowIso],
+  );
 
   return defaults;
 }
@@ -170,20 +169,19 @@ async function queryPeriodAggregates(
   startIsoInclusive: string,
   endIsoExclusive: string,
 ): Promise<{ usedRuns: number; usedTokens: number }> {
-  const row = await db
-    .prepare(
-      [
-        "SELECT",
-        "COALESCE(SUM(run_count), 0) AS used_runs,",
-        "COALESCE(SUM(model_token_count), 0) AS used_tokens",
-        "FROM org_usage_daily",
-        "WHERE organization_id = ?",
-        "AND usage_date >= ?",
-        "AND usage_date < ?",
-      ].join(" "),
-    )
-    .bind(organizationId, startIsoInclusive.slice(0, 10), endIsoExclusive.slice(0, 10))
-    .first<AggregateRow>();
+  const row = await queryFirst<AggregateRow>(
+    db,
+    [
+      "SELECT",
+      "COALESCE(SUM(run_count), 0) AS used_runs,",
+      "COALESCE(SUM(model_token_count), 0) AS used_tokens",
+      "FROM org_usage_daily",
+      "WHERE organization_id = ?",
+      "AND usage_date >= ?",
+      "AND usage_date < ?",
+    ].join(" "),
+    [organizationId, startIsoInclusive.slice(0, 10), endIsoExclusive.slice(0, 10)],
+  );
 
   return {
     usedRuns: toInt(row?.used_runs),
@@ -198,23 +196,22 @@ async function queryTrendPoints(
   endIsoExclusive: string,
   now: Date,
 ): Promise<UsageTrendPoint[]> {
-  const rows = await db
-    .prepare(
-      [
-        "SELECT",
-        "usage_date,",
-        "COALESCE(SUM(run_count), 0) AS runs,",
-        "COALESCE(SUM(model_token_count), 0) AS tokens",
-        "FROM org_usage_daily",
-        "WHERE organization_id = ?",
-        "AND usage_date >= ?",
-        "AND usage_date < ?",
-        "GROUP BY usage_date",
-        "ORDER BY usage_date ASC",
-      ].join(" "),
-    )
-    .bind(organizationId, startIsoInclusive.slice(0, 10), endIsoExclusive.slice(0, 10))
-    .all<TrendRow>();
+  const rows = await queryAll<TrendRow>(
+    db,
+    [
+      "SELECT",
+      "usage_date,",
+      "COALESCE(SUM(run_count), 0) AS runs,",
+      "COALESCE(SUM(model_token_count), 0) AS tokens",
+      "FROM org_usage_daily",
+      "WHERE organization_id = ?",
+      "AND usage_date >= ?",
+      "AND usage_date < ?",
+      "GROUP BY usage_date",
+      "ORDER BY usage_date ASC",
+    ].join(" "),
+    [organizationId, startIsoInclusive.slice(0, 10), endIsoExclusive.slice(0, 10)],
+  );
 
   const byDay = new Map<string, { runs: number; tokens: number }>();
   for (const row of rows) {
@@ -248,24 +245,23 @@ async function queryTopModels(
   endIsoExclusive: string,
   totalTokens: number,
 ): Promise<ModelUsageEntry[]> {
-  const rows = await db
-    .prepare(
-      [
-        "SELECT",
-        "model_id,",
-        "COALESCE(SUM(tokens), 0) AS tokens,",
-        "COALESCE(SUM(runs), 0) AS runs",
-        "FROM org_usage_model_daily",
-        "WHERE organization_id = ?",
-        "AND usage_date >= ?",
-        "AND usage_date < ?",
-        "GROUP BY model_id",
-        "ORDER BY tokens DESC",
-        "LIMIT 8",
-      ].join(" "),
-    )
-    .bind(organizationId, startIsoInclusive.slice(0, 10), endIsoExclusive.slice(0, 10))
-    .all<ModelAggregateRow>();
+  const rows = await queryAll<ModelAggregateRow>(
+    db,
+    [
+      "SELECT",
+      "model_id,",
+      "COALESCE(SUM(tokens), 0) AS tokens,",
+      "COALESCE(SUM(runs), 0) AS runs",
+      "FROM org_usage_model_daily",
+      "WHERE organization_id = ?",
+      "AND usage_date >= ?",
+      "AND usage_date < ?",
+      "GROUP BY model_id",
+      "ORDER BY tokens DESC",
+      "LIMIT 8",
+    ].join(" "),
+    [organizationId, startIsoInclusive.slice(0, 10), endIsoExclusive.slice(0, 10)],
+  );
 
   const denom = totalTokens > 0 ? totalTokens : 0;
   return rows

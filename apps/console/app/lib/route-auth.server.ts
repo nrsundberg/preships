@@ -12,8 +12,11 @@ function buildRedirectTo(request: Request): string {
   return `${url.pathname}${url.search}`;
 }
 
-export async function requireConsoleSession(request: Request): Promise<ConsoleSession> {
-  const session = await getConsoleSession(request);
+export async function requireConsoleSession(
+  request: Request,
+  context: unknown,
+): Promise<ConsoleSession> {
+  const session = await getConsoleSession(request, context);
   if (!session) {
     throw redirect(`/login?redirectTo=${encodeURIComponent(buildRedirectTo(request))}`);
   }
@@ -36,7 +39,7 @@ export async function requireConsoleOrgContext({
   authDb: D1DatabaseLike;
   orgContext: ConsoleOrgContext;
 }> {
-  const session = await requireConsoleSession(request);
+  const session = await requireConsoleSession(request, context);
   const authDb = getConsoleAuthDbFromContext(context);
   if (!authDb) {
     throw new Response("Console auth DB is unavailable.", { status: 500 });

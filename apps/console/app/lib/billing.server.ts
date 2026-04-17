@@ -1,4 +1,4 @@
-import type { D1DatabaseLike } from "./db.server";
+import { executeQuery, queryFirst, type D1DatabaseLike } from "./db.server";
 
 export type BillingPlanTier = "free" | "pro" | "enterprise";
 
@@ -168,30 +168,28 @@ function nowIso(): string {
 }
 
 async function ensureOrgBillingTable(db: D1DatabaseLike): Promise<void> {
-  await db
-    .prepare(
-      [
-        "CREATE TABLE IF NOT EXISTS org_billing (",
-        "organization_id TEXT PRIMARY KEY,",
-        "plan_tier TEXT NOT NULL DEFAULT 'free',",
-        "plan_status TEXT NOT NULL DEFAULT 'active',",
-        "stripe_customer_id TEXT,",
-        "stripe_subscription_id TEXT,",
-        "stripe_price_id TEXT,",
-        "current_period_start_at TEXT,",
-        "current_period_end_at TEXT,",
-        "billing_email TEXT,",
-        "billing_name TEXT,",
-        "email_invoices INTEGER NOT NULL DEFAULT 1,",
-        "tax_exempt INTEGER NOT NULL DEFAULT 0,",
-        "invoice_memo TEXT,",
-        "created_at TEXT NOT NULL,",
-        "updated_at TEXT NOT NULL",
-        ")",
-      ].join(" "),
-    )
-    .bind()
-    .run();
+  await executeQuery(
+    db,
+    [
+      "CREATE TABLE IF NOT EXISTS org_billing (",
+      "organization_id TEXT PRIMARY KEY,",
+      "plan_tier TEXT NOT NULL DEFAULT 'free',",
+      "plan_status TEXT NOT NULL DEFAULT 'active',",
+      "stripe_customer_id TEXT,",
+      "stripe_subscription_id TEXT,",
+      "stripe_price_id TEXT,",
+      "current_period_start_at TEXT,",
+      "current_period_end_at TEXT,",
+      "billing_email TEXT,",
+      "billing_name TEXT,",
+      "email_invoices INTEGER NOT NULL DEFAULT 1,",
+      "tax_exempt INTEGER NOT NULL DEFAULT 0,",
+      "invoice_memo TEXT,",
+      "created_at TEXT NOT NULL,",
+      "updated_at TEXT NOT NULL",
+      ")",
+    ].join(" "),
+  );
 
   for (const statement of [
     "ALTER TABLE org_billing ADD COLUMN billing_email TEXT",
@@ -201,7 +199,7 @@ async function ensureOrgBillingTable(db: D1DatabaseLike): Promise<void> {
     "ALTER TABLE org_billing ADD COLUMN invoice_memo TEXT",
   ]) {
     try {
-      await db.prepare(statement).bind().run();
+      await executeQuery(db, statement);
     } catch {
       // Ignore duplicate-column failures on already-migrated environments.
     }
@@ -213,17 +211,16 @@ async function getBillingProfileRow(
   organizationId: string,
 ): Promise<BillingProfileRow | null> {
   await ensureOrgBillingTable(db);
-  return db
-    .prepare(
-      [
-        "SELECT organization_id, plan_tier, plan_status, billing_email, billing_name,",
-        "email_invoices, tax_exempt, invoice_memo, stripe_customer_id,",
-        "stripe_subscription_id, stripe_price_id, current_period_end_at",
-        "FROM org_billing WHERE organization_id = ? LIMIT 1",
-      ].join(" "),
-    )
-    .bind(organizationId)
-    .first<BillingProfileRow>();
+  return queryFirst<BillingProfileRow>(
+    db,
+    [
+      "SELECT organization_id, plan_tier, plan_status, billing_email, billing_name,",
+      "email_invoices, tax_exempt, invoice_memo, stripe_customer_id,",
+      "stripe_subscription_id, stripe_price_id, current_period_end_at",
+      "FROM org_billing WHERE organization_id = ? LIMIT 1",
+    ].join(" "),
+    [organizationId],
+  );
 }
 
 async function createDefaultBillingProfile(
@@ -234,16 +231,15 @@ async function createDefaultBillingProfile(
   const defaultTier: BillingPlanTier = "free";
   const currentPeriodEndIso = defaultCurrentPeriodEndIso();
   const now = nowIso();
-  await db
-    .prepare(
-      [
-        "INSERT INTO org_billing (",
-        "organization_id, plan_tier, plan_status, email_invoices, tax_exempt, current_period_end_at, created_at, updated_at",
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      ].join(" "),
-    )
-    .bind(organizationId, defaultTier, "active", 1, 0, currentPeriodEndIso, now, now)
-    .run();
+  await executeQuery(
+    db,
+    [
+      "INSERT INTO org_billing (",
+      "organization_id, plan_tier, plan_status, email_invoices, tax_exempt, current_period_end_at, created_at, updated_at",
+      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ].join(" "),
+    [organizationId, defaultTier, "active", 1, 0, currentPeriodEndIso, now, now],
+  );
 
   return {
     organization_id: organizationId,
@@ -279,14 +275,13 @@ export async function updateSelectedPlanTier(params: {
   tier: BillingPlanTier;
 }): Promise<void> {
   await ensureOrgBillingTable(params.db);
-  await params.db
-    .prepare(
-      ["UPDATE org_billing", "SET plan_tier = ?, updated_at = ?", "WHERE organization_id = ?"].join(
-        " ",
-      ),
-    )
-    .bind(params.tier, nowIso(), params.orgId)
-    .run();
+  await executeQuery(
+    params.db,
+    ["UPDATE org_billing", "SET plan_tier = ?, updated_at = ?", "WHERE organization_id = ?"].join(
+      " ",
+    ),
+    [params.tier, nowIso(), params.orgId],
+  );
 }
 
 export async function updateBillingContactAndPreferences(params: {
@@ -299,15 +294,14 @@ export async function updateBillingContactAndPreferences(params: {
   invoiceMemo: string | null;
 }): Promise<void> {
   await ensureOrgBillingTable(params.db);
-  await params.db
-    .prepare(
-      [
-        "UPDATE org_billing",
-        "SET billing_email = ?, billing_name = ?, email_invoices = ?, tax_exempt = ?, invoice_memo = ?, updated_at = ?",
-        "WHERE organization_id = ?",
-      ].join(" "),
-    )
-    .bind(
+  await executeQuery(
+    params.db,
+    [
+      "UPDATE org_billing",
+      "SET billing_email = ?, billing_name = ?, email_invoices = ?, tax_exempt = ?, invoice_memo = ?, updated_at = ?",
+      "WHERE organization_id = ?",
+    ].join(" "),
+    [
       normalizeOptionalText(params.billingEmail),
       normalizeOptionalText(params.billingName),
       boolToSql(params.emailInvoices),
@@ -315,8 +309,8 @@ export async function updateBillingContactAndPreferences(params: {
       normalizeOptionalText(params.invoiceMemo),
       nowIso(),
       params.orgId,
-    )
-    .run();
+    ],
+  );
 }
 
 function formEncode(input: Record<string, string>): string {
@@ -361,10 +355,11 @@ async function upsertStripeCustomer(params: {
   billingEmail: string | null;
   secretKey: string;
 }): Promise<string> {
-  const existing = await params.db
-    .prepare("SELECT stripe_customer_id FROM org_billing WHERE organization_id = ? LIMIT 1")
-    .bind(params.orgId)
-    .first<{ stripe_customer_id: string | null }>();
+  const existing = await queryFirst<{ stripe_customer_id: string | null }>(
+    params.db,
+    "SELECT stripe_customer_id FROM org_billing WHERE organization_id = ? LIMIT 1",
+    [params.orgId],
+  );
   if (existing?.stripe_customer_id) {
     return existing.stripe_customer_id;
   }
@@ -384,12 +379,11 @@ async function upsertStripeCustomer(params: {
     throw new Error("Stripe did not return a customer ID.");
   }
 
-  await params.db
-    .prepare(
-      "UPDATE org_billing SET stripe_customer_id = ?, updated_at = ? WHERE organization_id = ?",
-    )
-    .bind(customerId, nowIso(), params.orgId)
-    .run();
+  await executeQuery(
+    params.db,
+    "UPDATE org_billing SET stripe_customer_id = ?, updated_at = ? WHERE organization_id = ?",
+    [customerId, nowIso(), params.orgId],
+  );
   return customerId;
 }
 
@@ -471,17 +465,16 @@ export async function createStripeCheckoutSession(params: {
     throw new Error("Stripe checkout session did not return a URL.");
   }
 
-  await params.db
-    .prepare(
-      "UPDATE org_billing SET stripe_price_id = ?, stripe_subscription_id = COALESCE(?, stripe_subscription_id), updated_at = ? WHERE organization_id = ?",
-    )
-    .bind(
+  await executeQuery(
+    params.db,
+    "UPDATE org_billing SET stripe_price_id = ?, stripe_subscription_id = COALESCE(?, stripe_subscription_id), updated_at = ? WHERE organization_id = ?",
+    [
       isStripePriceId(params.stripePriceId) ? params.stripePriceId.trim() : null,
       subscriptionId,
       nowIso(),
       params.orgId,
-    )
-    .run();
+    ],
+  );
 
   return sessionUrl;
 }

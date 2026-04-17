@@ -16,7 +16,7 @@ export async function requireConsoleOrgAccess(args: {
   context: unknown;
   requestedOrgId?: string | null;
 }): Promise<ResolvedConsoleOrgAccess> {
-  const session = await getConsoleSession(args.request);
+  const session = await getConsoleSession(args.request, args.context);
   if (!session) {
     throw new Error("Missing console session.");
   }

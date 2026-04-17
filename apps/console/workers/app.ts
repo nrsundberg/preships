@@ -2,6 +2,7 @@ import { type AppLoadContext, createRequestHandler, RouterContextProvider } from
 import { authenticateApiKey } from "../app/lib/api-keys.server";
 import type { ConsoleAuthEnv } from "../app/lib/auth.server";
 import { createDeviceSession, consumeDeviceToken } from "../app/lib/device-auth.server";
+import { getPrismaFromD1 } from "../app/lib/prisma.server";
 import {
   processStripeWebhookEvent,
   verifyStripeWebhookSignature,
@@ -29,9 +30,8 @@ async function handleCliDeviceRequest(request: Request, env: WorkerEnv): Promise
   const url = new URL(request.url);
 
   if (request.method === "POST" && url.pathname === "/api/v1/cli/auth/device") {
-    const session = await createDeviceSession(
-      env.AUTH_DB as Parameters<typeof createDeviceSession>[0],
-    );
+    const db = getPrismaFromD1(env.AUTH_DB);
+    const session = await createDeviceSession(db);
     const loginUrl = new URL("/login/device", url.origin);
     loginUrl.searchParams.set("code", session.deviceCode);
 
@@ -64,10 +64,8 @@ async function handleCliDeviceRequest(request: Request, env: WorkerEnv): Promise
       return jsonResponse({ error: "deviceCode is required." }, 400);
     }
 
-    const result = await consumeDeviceToken(
-      env.AUTH_DB as Parameters<typeof consumeDeviceToken>[0],
-      deviceCode,
-    );
+    const db = getPrismaFromD1(env.AUTH_DB);
+    const result = await consumeDeviceToken(db, deviceCode);
 
     if (result.status === "pending") {
       return jsonResponse({ status: "pending" }, 202);
@@ -109,10 +107,7 @@ async function handleUsageIngestRequest(
     return jsonResponse({ error: "Missing bearer token." }, 401);
   }
 
-  const auth = await authenticateApiKey(
-    env.AUTH_DB as Parameters<typeof authenticateApiKey>[0],
-    token,
-  );
+  const auth = await authenticateApiKey(getPrismaFromD1(env.AUTH_DB), token);
   if (!auth.ok) {
     return jsonResponse({ error: "Invalid API key." }, 401);
   }
@@ -125,7 +120,7 @@ async function handleUsageIngestRequest(
   }
 
   await ingestUsageForOrg({
-    db: env.AUTH_DB as unknown as Parameters<typeof ingestUsageForOrg>[0]["db"],
+    db: getPrismaFromD1(env.AUTH_DB) as Parameters<typeof ingestUsageForOrg>[0]["db"],
     organizationId: auth.organizationId,
     payload: (typeof payload === "object" && payload ? payload : {}) as Parameters<
       typeof ingestUsageForOrg
@@ -167,7 +162,7 @@ async function handleStripeWebhookRequest(
   }
 
   const result = await processStripeWebhookEvent({
-    db: env.AUTH_DB as unknown as Parameters<typeof processStripeWebhookEvent>[0]["db"],
+    db: getPrismaFromD1(env.AUTH_DB) as Parameters<typeof processStripeWebhookEvent>[0]["db"],
     event: (typeof eventPayload === "object" && eventPayload ? eventPayload : {}) as Parameters<
       typeof processStripeWebhookEvent
     >[0]["event"],

@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { drizzle } from "drizzle-orm/d1";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import type { D1Database } from "@cloudflare/workers-types";
+import { getPrisma } from "./prisma.server";
 
 export type ConsoleSessionUser = {
   id: string;
@@ -12,11 +13,9 @@ export type ConsoleSession = {
   user: ConsoleSessionUser;
 };
 
-type D1DatabaseLike = Parameters<typeof drizzle>[0];
-
 /** Worker / Cloudflare bindings used by Better Auth and loaders. */
 export type ConsoleAuthEnv = {
-  AUTH_DB: D1DatabaseLike;
+  AUTH_DB: D1Database;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL?: string;
   ENVIRONMENT?: string;
@@ -42,6 +41,21 @@ type CloudflareLoadContext = {
   };
 };
 
+function normalizeBetterAuthBaseUrl(value: string | undefined): string | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+  try {
+    const url = new URL(value);
+    url.pathname = "/";
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return value;
+  }
+}
+
 function getEnvFromContext(context: unknown): ConsoleAuthEnv | null {
   const cf =
     typeof context === "object" && context !== null && "cloudflare" in context
@@ -63,6 +77,7 @@ export function getAuth(context: unknown) {
   if (!env) {
     throw new Error("Console auth environment is unavailable.");
   }
+  const normalizedBaseUrl = normalizeBetterAuthBaseUrl(env.BETTER_AUTH_URL);
 
   const cloudflare =
     typeof context === "object" && context !== null && "cloudflare" in context
@@ -71,7 +86,7 @@ export function getAuth(context: unknown) {
   const executionCtx = cloudflare?.ctx;
   const isProduction = env.ENVIRONMENT !== "development";
 
-  const db = drizzle(env.AUTH_DB);
+  const prisma = getPrisma(context);
   const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
 
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
@@ -90,9 +105,10 @@ export function getAuth(context: unknown) {
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
     basePath: "/api/auth",
-    baseURL: env.BETTER_AUTH_URL,
-    database: drizzleAdapter(db, {
+    baseURL: normalizedBaseUrl,
+    database: prismaAdapter(prisma, {
       provider: "sqlite",
+      transaction: false,
     }),
     emailAndPassword: {
       enabled: true,
@@ -131,29 +147,18 @@ function toConsoleSession(payload: BetterAuthResponse | null): ConsoleSession | 
   return { user };
 }
 
-export async function getConsoleSession(request: Request): Promise<ConsoleSession | null> {
-  const cookie = request.headers.get("cookie");
-  if (!cookie) {
+export async function getConsoleSession(
+  request: Request,
+  context: unknown,
+): Promise<ConsoleSession | null> {
+  if (!request.headers.get("cookie")) {
     return null;
   }
 
-  const url = new URL(request.url);
-  const endpoint = new URL("/api/auth/get-session", url.origin);
-
   try {
-    const response = await fetch(endpoint, {
-      headers: {
-        accept: "application/json",
-        cookie,
-      },
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as BetterAuthResponse | null;
-    return toConsoleSession(payload);
+    const auth = getAuth(context);
+    const payload = await auth.api.getSession({ headers: request.headers });
+    return toConsoleSession(payload as BetterAuthResponse | null);
   } catch {
     return null;
   }

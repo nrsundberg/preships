@@ -18,9 +18,9 @@ export const meta: MetaFunction = () => [
   },
 ];
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({ request, context }: LoaderFunctionArgs) {
   const { requireConsoleSession } = await import("~/lib/route-auth.server");
-  await requireConsoleSession(request);
+  await requireConsoleSession(request, context);
   const url = new URL(request.url);
   const code = (url.searchParams.get("code") ?? "").trim();
 

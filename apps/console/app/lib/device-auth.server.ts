@@ -2,20 +2,10 @@ const DEVICE_CODE_BYTES = 18;
 const API_KEY_BYTES = 24;
 
 import { createApiKeyForOrg } from "./api-keys.server";
+import { executeQuery, queryFirst, type D1DatabaseLike } from "./db.server";
 
 export const DEVICE_AUTH_POLL_INTERVAL_SECONDS = 2;
 export const DEVICE_AUTH_EXPIRES_IN_SECONDS = 600;
-
-type BoundStatement = {
-  run(): Promise<{ success: boolean }>;
-  first<T = unknown>(): Promise<T | null>;
-};
-
-type DeviceAuthDatabase = {
-  prepare(query: string): {
-    bind(...values: unknown[]): BoundStatement;
-  };
-};
 
 type DeviceSessionRow = {
   device_code: string;
@@ -46,7 +36,7 @@ function toIsoDate(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
 }
 
-export async function createDeviceSession(db: DeviceAuthDatabase): Promise<{
+export async function createDeviceSession(db: D1DatabaseLike): Promise<{
   deviceCode: string;
   intervalSeconds: number;
   expiresInSeconds: number;
@@ -55,12 +45,11 @@ export async function createDeviceSession(db: DeviceAuthDatabase): Promise<{
   const deviceCode = randomBase64Url(DEVICE_CODE_BYTES);
   const expiresAt = toIsoDate(now + DEVICE_AUTH_EXPIRES_IN_SECONDS * 1000);
 
-  const insertResult = await db
-    .prepare(
-      "INSERT INTO cli_device_sessions (device_code, expires_at, approved_at, token) VALUES (?, ?, NULL, NULL)",
-    )
-    .bind(deviceCode, expiresAt)
-    .run();
+  const insertResult = await executeQuery(
+    db,
+    "INSERT INTO cli_device_sessions (device_code, expires_at, approved_at, token) VALUES (?, ?, NULL, NULL)",
+    [deviceCode, expiresAt],
+  );
 
   if (!insertResult.success) {
     throw new Error("Failed to create device auth session.");
@@ -74,7 +63,7 @@ export async function createDeviceSession(db: DeviceAuthDatabase): Promise<{
 }
 
 export async function approveDeviceSession(
-  db: DeviceAuthDatabase,
+  db: D1DatabaseLike,
   deviceCode: string,
   context?: { organizationId?: string; userId?: string },
 ): Promise<"approved" | "not_found" | "expired"> {
@@ -86,25 +75,25 @@ export async function approveDeviceSession(
   const nowIso = toIsoDate(Date.now());
   const token = `psk_${randomBase64Url(API_KEY_BYTES)}`;
 
-  const updateResult = await db
-    .prepare(
-      [
-        "UPDATE cli_device_sessions",
-        "SET approved_at = ?, token = ?",
-        "WHERE device_code = ?",
-        "  AND approved_at IS NULL",
-        "  AND token IS NULL",
-        "  AND expires_at > ?",
-      ].join(" "),
-    )
-    .bind(nowIso, token, normalizedCode, nowIso)
-    .run();
+  const updateResult = await executeQuery(
+    db,
+    [
+      "UPDATE cli_device_sessions",
+      "SET approved_at = ?, token = ?",
+      "WHERE device_code = ?",
+      "  AND approved_at IS NULL",
+      "  AND token IS NULL",
+      "  AND expires_at > ?",
+    ].join(" "),
+    [nowIso, token, normalizedCode, nowIso],
+  );
 
   if (updateResult.success) {
-    const approved = await db
-      .prepare("SELECT token FROM cli_device_sessions WHERE device_code = ? AND token = ?")
-      .bind(normalizedCode, token)
-      .first<{ token: string | null }>();
+    const approved = await queryFirst<{ token: string | null }>(
+      db,
+      "SELECT token FROM cli_device_sessions WHERE device_code = ? AND token = ?",
+      [normalizedCode, token],
+    );
     if (approved?.token === token) {
       if (context?.organizationId && context?.userId) {
         await createApiKeyForOrg({
@@ -120,10 +109,11 @@ export async function approveDeviceSession(
     }
   }
 
-  const existing = await db
-    .prepare("SELECT expires_at FROM cli_device_sessions WHERE device_code = ?")
-    .bind(normalizedCode)
-    .first<{ expires_at: string }>();
+  const existing = await queryFirst<{ expires_at: string }>(
+    db,
+    "SELECT expires_at FROM cli_device_sessions WHERE device_code = ?",
+    [normalizedCode],
+  );
 
   if (!existing) {
     return "not_found";
@@ -137,7 +127,7 @@ export async function approveDeviceSession(
 }
 
 export async function consumeDeviceToken(
-  db: DeviceAuthDatabase,
+  db: D1DatabaseLike,
   deviceCode: string,
 ): Promise<DeviceSessionStatus> {
   const normalizedCode = deviceCode.trim();
@@ -145,12 +135,11 @@ export async function consumeDeviceToken(
     return { status: "not_found" };
   }
 
-  const session = await db
-    .prepare(
-      "SELECT device_code, expires_at, approved_at, token FROM cli_device_sessions WHERE device_code = ?",
-    )
-    .bind(normalizedCode)
-    .first<DeviceSessionRow>();
+  const session = await queryFirst<DeviceSessionRow>(
+    db,
+    "SELECT device_code, expires_at, approved_at, token FROM cli_device_sessions WHERE device_code = ?",
+    [normalizedCode],
+  );
 
   if (!session) {
     return { status: "not_found" };
@@ -165,10 +154,11 @@ export async function consumeDeviceToken(
   }
 
   const token = session.token;
-  const consumeResult = await db
-    .prepare("UPDATE cli_device_sessions SET token = NULL WHERE device_code = ? AND token = ?")
-    .bind(normalizedCode, token)
-    .run();
+  const consumeResult = await executeQuery(
+    db,
+    "UPDATE cli_device_sessions SET token = NULL WHERE device_code = ? AND token = ?",
+    [normalizedCode, token],
+  );
 
   if (!consumeResult.success) {
     return { status: "pending" };

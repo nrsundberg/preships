@@ -1,6 +1,11 @@
 import type { ConsoleSessionUser } from "./auth.server";
 import { getConsoleSession } from "./auth.server";
-import { getConsoleAuthDbFromContext, type D1DatabaseLike } from "./db.server";
+import {
+  executeQuery,
+  getConsoleAuthDbFromContext,
+  queryFirst,
+  type D1DatabaseLike,
+} from "./db.server";
 
 export { getConsoleAuthDbFromContext } from "./db.server";
 
@@ -53,39 +58,38 @@ async function ensureMembershipForUser(
   db: D1DatabaseLike,
   params: { organizationId: string; userId: string },
 ): Promise<void> {
-  const existing = await db
-    .prepare("SELECT id FROM memberships WHERE organization_id = ? AND user_id = ? LIMIT 1")
-    .bind(params.organizationId, params.userId)
-    .first<{ id: string }>();
+  const existing = await queryFirst<{ id: string }>(
+    db,
+    "SELECT id FROM memberships WHERE organization_id = ? AND user_id = ? LIMIT 1",
+    [params.organizationId, params.userId],
+  );
 
   if (existing) return;
 
   const membershipId = randomBase64Url(12);
-  await db
-    .prepare(
-      "INSERT INTO memberships (id, organization_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(membershipId, params.organizationId, params.userId, "owner", nowIso())
-    .run();
+  await executeQuery(
+    db,
+    "INSERT INTO memberships (id, organization_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)",
+    [membershipId, params.organizationId, params.userId, "owner", nowIso()],
+  );
 }
 
 async function getOrgFromMembership(
   authDb: D1DatabaseLike,
   params: { organizationId: string; userId: string },
 ): Promise<(ConsoleOrg & { membershipRole: "owner" | "member" }) | null> {
-  return authDb
-    .prepare(
-      [
-        "SELECT o.id, o.name, o.type, o.tier,",
-        "CASE WHEN m.role = 'owner' THEN 'owner' ELSE 'member' END AS membershipRole",
-        "FROM memberships m",
-        "INNER JOIN organizations o ON o.id = m.organization_id",
-        "WHERE m.organization_id = ? AND m.user_id = ?",
-        "LIMIT 1",
-      ].join(" "),
-    )
-    .bind(params.organizationId, params.userId)
-    .first<ConsoleOrg & { membershipRole: "owner" | "member" }>();
+  return queryFirst<ConsoleOrg & { membershipRole: "owner" | "member" }>(
+    authDb,
+    [
+      "SELECT o.id, o.name, o.type, o.tier,",
+      "CASE WHEN m.role = 'owner' THEN 'owner' ELSE 'member' END AS membershipRole",
+      "FROM memberships m",
+      "INNER JOIN organizations o ON o.id = m.organization_id",
+      "WHERE m.organization_id = ? AND m.user_id = ?",
+      "LIMIT 1",
+    ].join(" "),
+    [params.organizationId, params.userId],
+  );
 }
 
 export async function resolveConsoleOrgContextFromSessionUser(
@@ -113,12 +117,11 @@ export async function resolveConsoleOrgContextFromSessionUser(
   }
 
   // Fast path: existing default personal org.
-  const existingOrg = await authDb
-    .prepare(
-      "SELECT id, name, type, tier FROM organizations WHERE personal_owner_user_id = ? LIMIT 1",
-    )
-    .bind(userId)
-    .first<ConsoleOrg>();
+  const existingOrg = await queryFirst<ConsoleOrg>(
+    authDb,
+    "SELECT id, name, type, tier FROM organizations WHERE personal_owner_user_id = ? LIMIT 1",
+    [userId],
+  );
 
   if (existingOrg) {
     await ensureMembershipForUser(authDb, { organizationId: existingOrg.id, userId });
@@ -130,32 +133,31 @@ export async function resolveConsoleOrgContextFromSessionUser(
   const createdAt = nowIso();
   const orgName = getDefaultPersonalOrgName(user);
 
-  const insertResult = await authDb
-    .prepare(
-      [
-        "INSERT INTO organizations (id, name, type, tier, personal_owner_user_id, created_at)",
-        "VALUES (?, ?, ?, ?, ?, ?)",
-      ].join(" "),
-    )
-    .bind(orgId, orgName, "personal", "free", userId, createdAt)
-    .run();
+  const insertResult = await executeQuery(
+    authDb,
+    [
+      "INSERT INTO organizations (id, name, type, tier, personal_owner_user_id, created_at)",
+      "VALUES (?, ?, ?, ?, ?, ?)",
+    ].join(" "),
+    [orgId, orgName, "personal", "free", userId, createdAt],
+  );
 
   // If this failed due to a concurrent create, re-read.
   let createdOrg =
     (insertResult.success
-      ? await authDb
-          .prepare("SELECT id, name, type, tier FROM organizations WHERE id = ? LIMIT 1")
-          .bind(orgId)
-          .first<ConsoleOrg>()
+      ? await queryFirst<ConsoleOrg>(
+          authDb,
+          "SELECT id, name, type, tier FROM organizations WHERE id = ? LIMIT 1",
+          [orgId],
+        )
       : null) ?? null;
 
   if (!createdOrg) {
-    createdOrg = await authDb
-      .prepare(
-        "SELECT id, name, type, tier FROM organizations WHERE personal_owner_user_id = ? LIMIT 1",
-      )
-      .bind(userId)
-      .first<ConsoleOrg>();
+    createdOrg = await queryFirst<ConsoleOrg>(
+      authDb,
+      "SELECT id, name, type, tier FROM organizations WHERE personal_owner_user_id = ? LIMIT 1",
+      [userId],
+    );
   }
 
   if (!createdOrg) {
@@ -171,7 +173,7 @@ export async function getConsoleOrgContext(
   request: Request,
   context: unknown,
 ): Promise<ConsoleOrgContext> {
-  const session = await getConsoleSession(request);
+  const session = await getConsoleSession(request, context);
   if (!session) {
     throw new Error("Missing console session.");
   }

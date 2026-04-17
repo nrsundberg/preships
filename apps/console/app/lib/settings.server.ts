@@ -1,15 +1,6 @@
 import type { ConsoleOrgContext } from "./org-context.server";
 import type { ConsoleSession } from "./auth.server";
-
-type D1DatabaseLike = {
-  prepare(query: string): {
-    bind(...values: unknown[]): {
-      run(): Promise<{ success: boolean }>;
-      first<T = unknown>(): Promise<T | null>;
-      all<T = unknown>(): Promise<{ results: T[] } | T[]>;
-    };
-  };
-};
+import { executeQuery, queryAll, queryFirst, type D1DatabaseLike } from "./db.server";
 
 type MembershipRow = {
   id: string;
@@ -110,33 +101,31 @@ async function getOrCreateNotification(
     notificationType: string;
   },
 ): Promise<NotificationRow> {
-  const existing = await db
-    .prepare(
-      [
-        "SELECT id, organization_id, user_id, notification_type, enabled, updated_at",
-        "FROM org_notifications",
-        "WHERE organization_id = ?",
-        "AND user_id = ?",
-        "AND notification_type = ?",
-        "LIMIT 1",
-      ].join(" "),
-    )
-    .bind(args.orgId, args.userId, args.notificationType)
-    .first<NotificationRow>();
+  const existing = await queryFirst<NotificationRow>(
+    db,
+    [
+      "SELECT id, organization_id, user_id, notification_type, enabled, updated_at",
+      "FROM org_notifications",
+      "WHERE organization_id = ?",
+      "AND user_id = ?",
+      "AND notification_type = ?",
+      "LIMIT 1",
+    ].join(" "),
+    [args.orgId, args.userId, args.notificationType],
+  );
   if (existing) return existing;
 
   const id = randomBase64Url(12);
   const timestamp = nowIso();
-  await db
-    .prepare(
-      [
-        "INSERT INTO org_notifications",
-        "(id, organization_id, user_id, notification_type, channel, enabled, threshold_value, created_at, updated_at)",
-        "VALUES (?, ?, ?, ?, 'email', 1, NULL, ?, ?)",
-      ].join(" "),
-    )
-    .bind(id, args.orgId, args.userId, args.notificationType, timestamp, timestamp)
-    .run();
+  await executeQuery(
+    db,
+    [
+      "INSERT INTO org_notifications",
+      "(id, organization_id, user_id, notification_type, channel, enabled, threshold_value, created_at, updated_at)",
+      "VALUES (?, ?, ?, ?, 'email', 1, NULL, ?, ?)",
+    ].join(" "),
+    [id, args.orgId, args.userId, args.notificationType, timestamp, timestamp],
+  );
 
   return {
     id,
@@ -148,10 +137,6 @@ async function getOrCreateNotification(
   };
 }
 
-function toResultArray<T>(value: { results: T[] } | T[]): T[] {
-  return Array.isArray(value) ? value : value.results;
-}
-
 export async function getSettingsPageData(args: {
   db: D1DatabaseLike;
   session: ConsoleSession;
@@ -159,55 +144,50 @@ export async function getSettingsPageData(args: {
 }): Promise<SettingsPageData> {
   const { db, session, orgContext } = args;
 
-  const org = await db
-    .prepare("SELECT id, name, type, tier FROM organizations WHERE id = ? LIMIT 1")
-    .bind(orgContext.org.id)
-    .first<{ id: string; name: string; type: string; tier: string }>();
+  const org = await queryFirst<{ id: string; name: string; type: string; tier: string }>(
+    db,
+    "SELECT id, name, type, tier FROM organizations WHERE id = ? LIMIT 1",
+    [orgContext.org.id],
+  );
 
   if (!org) {
     throw new Response("Organization was not found.", { status: 404 });
   }
 
-  const membersRaw = await db
-    .prepare(
-      [
-        "SELECT m.id, m.organization_id, m.user_id, m.role, m.created_at, u.name AS user_name, u.email AS user_email",
-        "FROM memberships m",
-        'LEFT JOIN "user" u ON u.id = m.user_id',
-        "WHERE m.organization_id = ?",
-        "ORDER BY m.created_at ASC",
-      ].join(" "),
-    )
-    .bind(org.id)
-    .all<MembershipRow>();
-  const membersRows = toResultArray(membersRaw);
+  const membersRows = await queryAll<MembershipRow>(
+    db,
+    [
+      "SELECT m.id, m.organization_id, m.user_id, m.role, m.created_at, u.name AS user_name, u.email AS user_email",
+      "FROM memberships m",
+      'LEFT JOIN "user" u ON u.id = m.user_id',
+      "WHERE m.organization_id = ?",
+      "ORDER BY m.created_at ASC",
+    ].join(" "),
+    [org.id],
+  );
 
-  const apiKeysRaw = await db
-    .prepare(
-      [
-        "SELECT id, organization_id, key_name, key_prefix, created_by_user_id, status, last_used_at, revoked_at, created_at",
-        "FROM api_keys",
-        "WHERE organization_id = ?",
-        "ORDER BY created_at DESC",
-      ].join(" "),
-    )
-    .bind(org.id)
-    .all<ApiKeyRow>();
-  const apiKeyRows = toResultArray(apiKeysRaw);
+  const apiKeyRows = await queryAll<ApiKeyRow>(
+    db,
+    [
+      "SELECT id, organization_id, key_name, key_prefix, created_by_user_id, status, last_used_at, revoked_at, created_at",
+      "FROM api_keys",
+      "WHERE organization_id = ?",
+      "ORDER BY created_at DESC",
+    ].join(" "),
+    [org.id],
+  );
 
-  const notificationRowsRaw = await db
-    .prepare(
-      [
-        "SELECT id, organization_id, user_id, notification_type, enabled, updated_at",
-        "FROM org_notifications",
-        "WHERE organization_id = ?",
-        "AND user_id = ?",
-        "AND notification_type IN ('usage-alerts', 'member-invites', 'security-alerts')",
-      ].join(" "),
-    )
-    .bind(org.id, session.user.id)
-    .all<NotificationRow>();
-  const notificationRows = toResultArray(notificationRowsRaw);
+  const notificationRows = await queryAll<NotificationRow>(
+    db,
+    [
+      "SELECT id, organization_id, user_id, notification_type, enabled, updated_at",
+      "FROM org_notifications",
+      "WHERE organization_id = ?",
+      "AND user_id = ?",
+      "AND notification_type IN ('usage-alerts', 'member-invites', 'security-alerts')",
+    ].join(" "),
+    [org.id, session.user.id],
+  );
   const notificationByType = new Map(
     notificationRows.map((row) => [row.notification_type, row] as const),
   );
@@ -266,10 +246,10 @@ export async function updateOrganizationProfile(args: {
   organizationName: string;
 }): Promise<void> {
   const trimmedName = args.organizationName.trim();
-  await args.db
-    .prepare("UPDATE organizations SET name = ? WHERE id = ?")
-    .bind(trimmedName, args.orgId)
-    .run();
+  await executeQuery(args.db, "UPDATE organizations SET name = ? WHERE id = ?", [
+    trimmedName,
+    args.orgId,
+  ]);
 }
 
 export async function updateNotificationPreferences(args: {
@@ -288,36 +268,35 @@ export async function updateNotificationPreferences(args: {
   ];
 
   for (const update of updates) {
-    const existing = await args.db
-      .prepare(
-        [
-          "SELECT id FROM org_notifications",
-          "WHERE organization_id = ?",
-          "AND user_id = ?",
-          "AND notification_type = ?",
-          "LIMIT 1",
-        ].join(" "),
-      )
-      .bind(args.orgId, args.userId, update.type)
-      .first<{ id: string }>();
+    const existing = await queryFirst<{ id: string }>(
+      args.db,
+      [
+        "SELECT id FROM org_notifications",
+        "WHERE organization_id = ?",
+        "AND user_id = ?",
+        "AND notification_type = ?",
+        "LIMIT 1",
+      ].join(" "),
+      [args.orgId, args.userId, update.type],
+    );
 
     if (existing) {
-      await args.db
-        .prepare("UPDATE org_notifications SET enabled = ?, updated_at = ? WHERE id = ?")
-        .bind(update.enabled ? 1 : 0, updatedAt, existing.id)
-        .run();
+      await executeQuery(
+        args.db,
+        "UPDATE org_notifications SET enabled = ?, updated_at = ? WHERE id = ?",
+        [update.enabled ? 1 : 0, updatedAt, existing.id],
+      );
       continue;
     }
 
-    await args.db
-      .prepare(
-        [
-          "INSERT INTO org_notifications",
-          "(id, organization_id, user_id, notification_type, channel, enabled, threshold_value, created_at, updated_at)",
-          "VALUES (?, ?, ?, ?, 'email', ?, NULL, ?, ?)",
-        ].join(" "),
-      )
-      .bind(
+    await executeQuery(
+      args.db,
+      [
+        "INSERT INTO org_notifications",
+        "(id, organization_id, user_id, notification_type, channel, enabled, threshold_value, created_at, updated_at)",
+        "VALUES (?, ?, ?, ?, 'email', ?, NULL, ?, ?)",
+      ].join(" "),
+      [
         randomBase64Url(12),
         args.orgId,
         args.userId,
@@ -325,7 +304,7 @@ export async function updateNotificationPreferences(args: {
         update.enabled ? 1 : 0,
         updatedAt,
         updatedAt,
-      )
-      .run();
+      ],
+    );
   }
 }

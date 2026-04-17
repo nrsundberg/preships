@@ -1,13 +1,4 @@
-type BoundStatement = {
-  run(): Promise<{ success: boolean }>;
-  first<T = unknown>(): Promise<T | null>;
-};
-
-type ApiKeysDatabase = {
-  prepare(query: string): {
-    bind(...values: unknown[]): BoundStatement;
-  };
-};
+import { executeQuery, type D1DatabaseLike, queryFirst } from "./db.server";
 
 type ApiKeyRow = {
   id: string;
@@ -33,7 +24,7 @@ export async function sha256Hex(input: string): Promise<string> {
 }
 
 export async function authenticateApiKey(
-  db: ApiKeysDatabase,
+  db: D1DatabaseLike,
   bearerToken: string,
 ): Promise<ApiKeyAuthResult> {
   const token = bearerToken.trim();
@@ -42,25 +33,26 @@ export async function authenticateApiKey(
   }
 
   const tokenHash = await sha256Hex(token);
-  const row = await db
-    .prepare("SELECT id, organization_id, status FROM api_keys WHERE token_hash = ? LIMIT 1")
-    .bind(tokenHash)
-    .first<ApiKeyRow>();
+  const row = await queryFirst<ApiKeyRow>(
+    db,
+    "SELECT id, organization_id, status FROM api_keys WHERE token_hash = ? LIMIT 1",
+    [tokenHash],
+  );
 
   if (!row || row.status !== "active") {
     return { ok: false };
   }
 
-  await db
-    .prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?")
-    .bind(new Date().toISOString(), row.id)
-    .run();
+  await executeQuery(db, "UPDATE api_keys SET last_used_at = ? WHERE id = ?", [
+    new Date().toISOString(),
+    row.id,
+  ]);
 
   return { ok: true, keyId: row.id, organizationId: row.organization_id };
 }
 
 export async function createApiKeyForOrg(params: {
-  db: ApiKeysDatabase;
+  db: D1DatabaseLike;
   organizationId: string;
   createdByUserId: string;
   keyName: string;
@@ -72,15 +64,14 @@ export async function createApiKeyForOrg(params: {
   const nowIso = new Date().toISOString();
   const id = crypto.randomUUID();
 
-  await params.db
-    .prepare(
-      [
-        "INSERT INTO api_keys (",
-        "id, organization_id, created_by_user_id, key_name, key_prefix, token_hash, scopes, status, created_at",
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)",
-      ].join(" "),
-    )
-    .bind(
+  await executeQuery(
+    params.db,
+    [
+      "INSERT INTO api_keys (",
+      "id, organization_id, created_by_user_id, key_name, key_prefix, token_hash, scopes, status, created_at",
+      ") VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)",
+    ].join(" "),
+    [
       id,
       params.organizationId,
       params.createdByUserId,
@@ -89,6 +80,6 @@ export async function createApiKeyForOrg(params: {
       tokenHash,
       params.scopes ?? "usage:ingest",
       nowIso,
-    )
-    .run();
+    ],
+  );
 }

@@ -29,10 +29,10 @@ export async function loader({
   params,
 }: LoaderFunctionArgs): Promise<LoaderData> {
   const { requireConsoleSession } = await import("~/lib/route-auth.server");
-  const { getConsoleAuthDbFromContext } = await import("~/lib/db.server");
+  const { getConsoleAuthDbFromContext, queryFirst } = await import("~/lib/db.server");
   const { getInviteByToken } = await import("~/lib/orgs.server");
 
-  const session = await requireConsoleSession(request);
+  const session = await requireConsoleSession(request, context);
   const authDb = getConsoleAuthDbFromContext(context);
   if (!authDb) {
     throw new Response("Console auth DB is unavailable.", { status: 500 });
@@ -41,10 +41,11 @@ export async function loader({
   const token = String(params.token ?? "").trim();
   const invite = token ? await getInviteByToken({ db: authDb, token }) : null;
   const orgRow = invite?.organizationId
-    ? await authDb
-        .prepare("SELECT name FROM organizations WHERE id = ? LIMIT 1")
-        .bind(invite.organizationId)
-        .first<{ name: string }>()
+    ? await queryFirst<{ name: string }>(
+        authDb,
+        "SELECT name FROM organizations WHERE id = ? LIMIT 1",
+        [invite.organizationId],
+      )
     : null;
 
   return {
@@ -71,7 +72,7 @@ export async function action({
   const { getConsoleAuthDbFromContext } = await import("~/lib/db.server");
   const { acceptInvite } = await import("~/lib/orgs.server");
 
-  const session = await requireConsoleSession(request);
+  const session = await requireConsoleSession(request, context);
   const authDb = getConsoleAuthDbFromContext(context);
   if (!authDb) {
     return { ok: false, message: "Invite service is unavailable." };

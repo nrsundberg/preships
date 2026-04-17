@@ -1,4 +1,4 @@
-import type { D1DatabaseLike } from "./db.server";
+import { executeQuery, queryFirst, type D1DatabaseLike } from "./db.server";
 
 type StripeWebhookVerificationResult =
   | { ok: true; timestamp: number }
@@ -201,20 +201,22 @@ async function findOrganizationIdForStripeData(params: {
   }
 
   if (params.stripeSubscriptionId) {
-    const bySubscription = await params.db
-      .prepare("SELECT organization_id FROM org_billing WHERE stripe_subscription_id = ? LIMIT 1")
-      .bind(params.stripeSubscriptionId)
-      .first<{ organization_id: string }>();
+    const bySubscription = await queryFirst<{ organization_id: string }>(
+      params.db,
+      "SELECT organization_id FROM org_billing WHERE stripe_subscription_id = ? LIMIT 1",
+      [params.stripeSubscriptionId],
+    );
     if (bySubscription?.organization_id) {
       return bySubscription.organization_id;
     }
   }
 
   if (params.stripeCustomerId) {
-    const byCustomer = await params.db
-      .prepare("SELECT organization_id FROM org_billing WHERE stripe_customer_id = ? LIMIT 1")
-      .bind(params.stripeCustomerId)
-      .first<{ organization_id: string }>();
+    const byCustomer = await queryFirst<{ organization_id: string }>(
+      params.db,
+      "SELECT organization_id FROM org_billing WHERE stripe_customer_id = ? LIMIT 1",
+      [params.stripeCustomerId],
+    );
     if (byCustomer?.organization_id) {
       return byCustomer.organization_id;
     }
@@ -233,21 +235,21 @@ async function upsertOrgBillingFromStripe(params: {
 }): Promise<void> {
   const now = new Date().toISOString();
 
-  const existing = await params.db
-    .prepare("SELECT organization_id FROM org_billing WHERE organization_id = ? LIMIT 1")
-    .bind(params.organizationId)
-    .first<{ organization_id: string }>();
+  const existing = await queryFirst<{ organization_id: string }>(
+    params.db,
+    "SELECT organization_id FROM org_billing WHERE organization_id = ? LIMIT 1",
+    [params.organizationId],
+  );
 
   if (!existing) {
-    await params.db
-      .prepare(
-        [
-          "INSERT INTO org_billing (",
-          "organization_id, plan_tier, plan_status, stripe_customer_id, stripe_subscription_id, current_period_end_at, created_at, updated_at",
-          ") VALUES (?, 'free', ?, ?, ?, ?, ?, ?)",
-        ].join(" "),
-      )
-      .bind(
+    await executeQuery(
+      params.db,
+      [
+        "INSERT INTO org_billing (",
+        "organization_id, plan_tier, plan_status, stripe_customer_id, stripe_subscription_id, current_period_end_at, created_at, updated_at",
+        ") VALUES (?, 'free', ?, ?, ?, ?, ?, ?)",
+      ].join(" "),
+      [
         params.organizationId,
         params.planStatus ?? "active",
         params.stripeCustomerId,
@@ -255,32 +257,31 @@ async function upsertOrgBillingFromStripe(params: {
         params.currentPeriodEndAt,
         now,
         now,
-      )
-      .run();
+      ],
+    );
     return;
   }
 
-  await params.db
-    .prepare(
-      [
-        "UPDATE org_billing",
-        "SET stripe_customer_id = COALESCE(?, stripe_customer_id),",
-        "stripe_subscription_id = ?,",
-        "plan_status = COALESCE(?, plan_status),",
-        "current_period_end_at = ?,",
-        "updated_at = ?",
-        "WHERE organization_id = ?",
-      ].join(" "),
-    )
-    .bind(
+  await executeQuery(
+    params.db,
+    [
+      "UPDATE org_billing",
+      "SET stripe_customer_id = COALESCE(?, stripe_customer_id),",
+      "stripe_subscription_id = ?,",
+      "plan_status = COALESCE(?, plan_status),",
+      "current_period_end_at = ?,",
+      "updated_at = ?",
+      "WHERE organization_id = ?",
+    ].join(" "),
+    [
       params.stripeCustomerId,
       params.stripeSubscriptionId,
       params.planStatus,
       params.currentPeriodEndAt,
       now,
       params.organizationId,
-    )
-    .run();
+    ],
+  );
 }
 
 export async function processStripeWebhookEvent(params: {
