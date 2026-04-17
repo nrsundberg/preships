@@ -69,6 +69,9 @@ _preships_completion() {
     login)
       COMPREPLY=( $(compgen -W "--api-key --api-url" -- "\${cur}") )
       ;;
+    run)
+      COMPREPLY=( $(compgen -W "--llm --no-llm" -- "\${cur}") )
+      ;;
     init)
       COMPREPLY=( $(compgen -W "--url" -- "\${cur}") )
       ;;
@@ -115,6 +118,10 @@ _preships() {
   case "\${words[2]}" in
     init)
       _arguments "--url[Target dev server URL]:url:_files"
+      ;;
+    run)
+      _arguments "--llm[Run LLM review after checks]" \\
+                 "--no-llm[Skip LLM review]"
       ;;
     report)
       _arguments "--format[Report format]:format:(markdown json)"
@@ -163,6 +170,8 @@ complete -c preships -n "__fish_use_subcommand" -a login -d "Log in to Preships 
 complete -c preships -n "__fish_use_subcommand" -a completion -d "Generate shell completion script"
 
 complete -c preships -n "__fish_seen_subcommand_from init" -l url -d "Target dev server URL"
+complete -c preships -n "__fish_seen_subcommand_from run" -l llm -d "Run LLM review after checks"
+complete -c preships -n "__fish_seen_subcommand_from run" -l no-llm -d "Skip LLM review"
 complete -c preships -n "__fish_seen_subcommand_from report" -l format -d "Report format" -a "markdown json"
 complete -c preships -n "__fish_seen_subcommand_from chat" -l model -d "Override model name for this chat session"
 complete -c preships -n "__fish_seen_subcommand_from chat" -l endpoint -d "Override model endpoint for this chat session"

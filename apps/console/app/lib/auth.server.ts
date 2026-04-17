@@ -14,10 +14,12 @@ export type ConsoleSession = {
 
 type D1DatabaseLike = Parameters<typeof drizzle>[0];
 
+/** Worker / Cloudflare bindings used by Better Auth and loaders. */
 export type ConsoleAuthEnv = {
   AUTH_DB: D1DatabaseLike;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL?: string;
+  ENVIRONMENT?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GITHUB_CLIENT_ID?: string;
@@ -33,9 +35,42 @@ type BetterAuthResponse = {
   };
 };
 
-const authByDatabase = new WeakMap<D1DatabaseLike, ReturnType<typeof createAuth>>();
+type CloudflareLoadContext = {
+  cloudflare?: {
+    env?: ConsoleAuthEnv;
+    ctx?: { waitUntil: (promise: Promise<unknown>) => void };
+  };
+};
 
-function createAuth(env: ConsoleAuthEnv) {
+function getEnvFromContext(context: unknown): ConsoleAuthEnv | null {
+  const cf =
+    typeof context === "object" && context !== null && "cloudflare" in context
+      ? (context as CloudflareLoadContext).cloudflare
+      : undefined;
+  const env = cf?.env;
+  if (!env?.AUTH_DB || !env.BETTER_AUTH_SECRET) {
+    return null;
+  }
+  return env;
+}
+
+/**
+ * Better Auth instance for this request (matches sam-barber-files / tome-bingo: build from context).
+ * Uses `ctx.waitUntil` when Cloudflare context is present so background work is not dropped on Workers.
+ */
+export function getAuth(context: unknown) {
+  const env = getEnvFromContext(context);
+  if (!env) {
+    throw new Error("Console auth environment is unavailable.");
+  }
+
+  const cloudflare =
+    typeof context === "object" && context !== null && "cloudflare" in context
+      ? (context as CloudflareLoadContext).cloudflare
+      : undefined;
+  const executionCtx = cloudflare?.ctx;
+  const isProduction = env.ENVIRONMENT !== "development";
+
   const db = drizzle(env.AUTH_DB);
   const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
 
@@ -54,6 +89,7 @@ function createAuth(env: ConsoleAuthEnv) {
 
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
+    basePath: "/api/auth",
     baseURL: env.BETTER_AUTH_URL,
     database: drizzleAdapter(db, {
       provider: "sqlite",
@@ -62,28 +98,26 @@ function createAuth(env: ConsoleAuthEnv) {
       enabled: true,
     },
     socialProviders,
-    trustedOrigins: ["https://console.preships.io", "http://localhost:8788"],
+    trustedOrigins: [
+      "https://console.preships.io",
+      "http://localhost:8788",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+    ],
+    advanced: {
+      cookiePrefix: "preships",
+      useSecureCookies: isProduction,
+      ...(executionCtx
+        ? {
+            backgroundTasks: {
+              handler: (promise: Promise<unknown>) => {
+                executionCtx.waitUntil(promise);
+              },
+            },
+          }
+        : {}),
+    },
   });
-}
-
-function getAuth(env: ConsoleAuthEnv) {
-  const existing = authByDatabase.get(env.AUTH_DB);
-  if (existing) {
-    return existing;
-  }
-
-  const auth = createAuth(env);
-  authByDatabase.set(env.AUTH_DB, auth);
-  return auth;
-}
-
-export function isAuthApiRequest(request: Request): boolean {
-  const pathname = new URL(request.url).pathname;
-  return pathname === "/api/auth" || pathname.startsWith("/api/auth/");
-}
-
-export function handleAuthRequest(request: Request, env: ConsoleAuthEnv): Promise<Response> {
-  return getAuth(env).handler(request);
 }
 
 function toConsoleSession(payload: BetterAuthResponse | null): ConsoleSession | null {

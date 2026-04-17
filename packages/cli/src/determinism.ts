@@ -1,6 +1,13 @@
 import type { CheckIssue } from "./types.js";
 
-const CHECK_TYPE_PRIORITY = ["lighthouse", "accessibility", "styles", "console", "network"];
+const CHECK_TYPE_PRIORITY = [
+  "lighthouse",
+  "accessibility",
+  "styles",
+  "console",
+  "network",
+  "llm-review",
+];
 
 const CHECK_TYPE_INDEX = new Map(CHECK_TYPE_PRIORITY.map((type, index) => [type, index]));
 

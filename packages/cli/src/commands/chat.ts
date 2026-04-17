@@ -5,12 +5,8 @@ import chalk from "chalk";
 import inquirer from "inquirer";
 
 import { getGlobalConfig, getRepoConfig, getRepoPreshipsDir, setGlobalConfig } from "../config.js";
-import {
-  buildRoutingPlan,
-  invokeWithRoutingPlan,
-  type ChatMessage,
-  type RouteCandidate,
-} from "../model-router.js";
+import { callOllamaChat } from "../model-invoke.js";
+import { buildRoutingPlan, invokeWithRoutingPlan, type ChatMessage } from "../model-router.js";
 
 interface ChatOptions {
   model?: string;
@@ -35,69 +31,6 @@ function appendGoal(repoPath: string, goalText: string): void {
 function appendChatLog(repoPath: string, line: string): void {
   const logPath = join(getRepoPreshipsDir(repoPath), "chat-log.md");
   appendFileSync(logPath, `${line}\n`, "utf8");
-}
-
-async function callOllamaChat(
-  candidate: RouteCandidate,
-  messages: ChatMessage[],
-  apiKey?: string,
-): Promise<string> {
-  const base = candidate.endpoint.replace(/\/+$/, "");
-  const requestBody = JSON.stringify({
-    model: candidate.model,
-    stream: false,
-    messages,
-  });
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-  };
-  if (candidate.provider === "cloud") {
-    if (!apiKey) {
-      throw new Error("Cloud routing requires a credential. Run `preships login` first.");
-    }
-    headers.authorization = `Bearer ${apiKey}`;
-  }
-
-  const urls =
-    candidate.provider === "cloud"
-      ? [`${base}/api/v1/chat`, `${base}/api/chat`]
-      : [`${base}/api/chat`];
-
-  let lastError = "unknown error";
-  for (const url of urls) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: requestBody,
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      lastError = `Model call failed (${response.status}): ${body}`;
-      if (
-        candidate.provider === "cloud" &&
-        response.status === 404 &&
-        url.endsWith("/api/v1/chat")
-      ) {
-        continue;
-      }
-      throw new Error(lastError);
-    }
-
-    const payload = (await response.json()) as {
-      message?: { content?: string };
-      content?: string;
-      output?: string;
-    };
-    const content =
-      payload.message?.content?.trim() ?? payload.content?.trim() ?? payload.output?.trim();
-    if (!content) {
-      throw new Error("Model returned an empty response.");
-    }
-    return content;
-  }
-
-  throw new Error(lastError);
 }
 
 function printHelp(): void {

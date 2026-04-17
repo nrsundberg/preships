@@ -27,8 +27,13 @@ program
 program
   .command("run")
   .description("Run deterministic QA checks now.")
-  .action(async () => {
-    await runCommand({ trigger: "manual" });
+  .option("--llm", "Run LLM review after deterministic checks (uses global model routing)")
+  .option("--no-llm", "Skip LLM review (overrides repo llmChecks)")
+  .action(async (options: { llm?: boolean; noLlm?: boolean }) => {
+    await runCommand({
+      trigger: "manual",
+      llmCli: { llm: options.llm, noLlm: options.noLlm },
+    });
   });
 
 program

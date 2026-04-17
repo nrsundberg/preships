@@ -1,18 +1,11 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import type { ConsoleAuthEnv } from "~/lib/auth.server";
-
-function getConsoleAuthEnv(context: unknown): ConsoleAuthEnv | null {
-  const cloudflareContext =
-    typeof context === "object" && context !== null && "cloudflare" in context
-      ? (context.cloudflare as { env?: ConsoleAuthEnv })
-      : undefined;
-
-  return cloudflareContext?.env ?? null;
-}
+import { getAuth } from "~/lib/auth.server";
 
 function forwardAuthRequest(request: Request, context: unknown): Promise<Response> {
-  const env = getConsoleAuthEnv(context);
-  if (!env) {
+  try {
+    const auth = getAuth(context);
+    return auth.handler(request);
+  } catch {
     return Promise.resolve(
       Response.json(
         { error: "Console auth environment is unavailable." },
@@ -20,10 +13,6 @@ function forwardAuthRequest(request: Request, context: unknown): Promise<Respons
       ),
     );
   }
-
-  return import("~/lib/auth.server").then(({ handleAuthRequest }) =>
-    handleAuthRequest(request, env),
-  );
 }
 
 export function loader({ request, context }: LoaderFunctionArgs) {

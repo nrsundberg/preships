@@ -8,6 +8,7 @@
     "dev": "npm exec -- react-router dev",
     "build": "npm exec -- react-router build",
     "typecheck": "npm exec -- react-router typegen && node scripts/react-router-type-shims.mjs && tsc --noEmit && tsc -p workers/tsconfig.json --noEmit",
+    "test": "node --import tsx --test app/**/*.test.ts",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "tailwindcss": "^4.1.4",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^7.1.10",
     "vite-tsconfig-paths": "^5.1.4",

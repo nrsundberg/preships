@@ -10,7 +10,7 @@ export type RoutingCostTier = "low" | "medium" | "high";
 type RoutingCostTierValue = 1 | 2 | 3;
 
 export interface RoutingContext {
-  task: "chat";
+  task: "chat" | "run_review";
   requiredCapabilities?: RoutingCapability[];
   maxCostTier?: RoutingCostTier;
   preferredProvider?: Provider;
@@ -164,6 +164,7 @@ export function buildRoutingPlan(
   options: { endpointOverride?: string } = {},
 ): RoutingPlan {
   const trace: string[] = [];
+  trace.push(`Task: ${context.task}`);
   const requiredCapabilities = context.requiredCapabilities ?? ["chat"];
   const maxCostTier = context.maxCostTier ? COST_TIER_VALUES[context.maxCostTier] : undefined;
 

@@ -17,6 +17,8 @@ export interface ReportDocumentCheck {
   type: string;
   status: "passed" | "failed" | "warning" | "error";
   durationMs: number;
+  /** Present when the CLI recorded an execution phase (deterministic vs LLM). */
+  execution?: "deterministic" | "llm";
   issues: ReportDocumentIssue[];
 }
 
@@ -110,6 +112,10 @@ export function buildReportDocument(
       type: normalizeText(check.type, "unknown"),
       status: normalizeCheckStatus(check.status),
       durationMs: normalizeDuration(check.durationMs),
+      execution:
+        check.execution === "llm" || check.execution === "deterministic"
+          ? check.execution
+          : undefined,
       issues: (Array.isArray(check.issues) ? check.issues : [])
         .map((issue) => ({
           title: normalizeText(issue?.title, "Issue"),
@@ -157,6 +163,11 @@ export function formatReportMarkdown(document: ReportDocument): string {
   for (const check of document.checks) {
     lines.push(`### ${check.name}`);
     lines.push(`- Type: ${check.type}`);
+    if (check.execution === "llm") {
+      lines.push(`- Execution: LLM (advisory opinion, not a substitute for failing checks)`);
+    } else if (check.execution === "deterministic") {
+      lines.push(`- Execution: deterministic`);
+    }
     lines.push(`- Status: **${check.status}**`);
     lines.push(`- Duration: ${check.durationMs}ms`);
     if (check.issues.length === 0) {

@@ -30,6 +30,8 @@ export interface RepoConfig {
   agents: string[];
   checkTypes: string[];
   deviceProfiles: string[];
+  /** When true, `preships run` / `watch` appends an LLM review after deterministic checks (unless `--no-llm`). */
+  llmChecks: boolean;
 }
 
 export interface ConfigLoaderOptions {
@@ -55,6 +57,7 @@ const DEFAULT_REPO_CONFIG: RepoConfig = {
   agents: ["cursor", "claude-code"],
   checkTypes: ["lighthouse", "accessibility", "styles", "console", "network"],
   deviceProfiles: ["desktop", "mobile-ios"],
+  llmChecks: false,
 };
 
 const nonEmptyString = z.string().trim().min(1, { message: "must not be empty" });
@@ -115,6 +118,7 @@ const repoConfigSchema = z.object({
   agents: z.array(nonEmptyString).min(1, "must include at least one agent"),
   checkTypes: z.array(nonEmptyString).min(1, "must include at least one check type"),
   deviceProfiles: z.array(nonEmptyString).min(1, "must include at least one device profile"),
+  llmChecks: z.boolean(),
 });
 
 const globalConfigFileSchema = z.object({
@@ -141,6 +145,7 @@ const repoConfigFileSchema = z.object({
   agents: z.array(z.string()).optional(),
   checkTypes: z.array(z.string()).optional(),
   deviceProfiles: z.array(z.string()).optional(),
+  llmChecks: z.boolean().optional(),
 });
 
 function escapeTomlString(value: string): string {
@@ -337,6 +342,7 @@ function writeRepoToml(config: RepoConfig): string {
     `agents = [${config.agents.map((v) => `"${escapeTomlString(v)}"`).join(", ")}]`,
     `checkTypes = [${normalizedCheckTypes.map((v) => `"${escapeTomlString(v)}"`).join(", ")}]`,
     `deviceProfiles = [${config.deviceProfiles.map((v) => `"${escapeTomlString(v)}"`).join(", ")}]`,
+    `llmChecks = ${config.llmChecks ? "true" : "false"}`,
   ];
   return `${lines.join("\n")}\n`;
 }
@@ -487,6 +493,10 @@ export function getRepoConfig(repoPath: string = process.cwd()): RepoConfig {
     deviceProfiles: Array.isArray(parsedResult.data.deviceProfiles)
       ? parsedResult.data.deviceProfiles.map(String)
       : DEFAULT_REPO_CONFIG.deviceProfiles,
+    llmChecks:
+      typeof parsedResult.data.llmChecks === "boolean"
+        ? parsedResult.data.llmChecks
+        : DEFAULT_REPO_CONFIG.llmChecks,
   };
   const validated = repoConfigSchema.safeParse(merged);
   if (!validated.success) {
@@ -507,6 +517,7 @@ export function initRepoConfig(repoPath: string, config: Partial<RepoConfig>): v
     agents: config.agents ?? DEFAULT_REPO_CONFIG.agents,
     checkTypes: normalizeCheckTypes(config.checkTypes ?? DEFAULT_REPO_CONFIG.checkTypes),
     deviceProfiles: config.deviceProfiles ?? DEFAULT_REPO_CONFIG.deviceProfiles,
+    llmChecks: config.llmChecks ?? DEFAULT_REPO_CONFIG.llmChecks,
   };
 
   writeFileSync(getRepoConfigPath(repoDir), writeRepoToml(merged), "utf8");

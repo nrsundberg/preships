@@ -1,6 +1,6 @@
 import { type AppLoadContext, createRequestHandler, RouterContextProvider } from "react-router";
 import { authenticateApiKey } from "../app/lib/api-keys.server";
-import { handleAuthRequest, isAuthApiRequest, type ConsoleAuthEnv } from "../app/lib/auth.server";
+import type { ConsoleAuthEnv } from "../app/lib/auth.server";
 import { createDeviceSession, consumeDeviceToken } from "../app/lib/device-auth.server";
 import {
   processStripeWebhookEvent,
@@ -198,12 +198,17 @@ export default {
       return cliResponse;
     }
 
-    if (isAuthApiRequest(request)) {
-      return handleAuthRequest(request, env);
+    const g = globalThis as typeof globalThis & { process?: { env: Record<string, unknown> } };
+    if (g.process?.env) {
+      Object.assign(g.process.env, env as Record<string, unknown>);
     }
 
     const context = new RouterContextProvider();
-    (context as { cloudflare?: unknown }).cloudflare = { env, ctx };
+    (context as { cloudflare?: unknown }).cloudflare = {
+      env,
+      ctx,
+      cf: (request as Request & { cf?: IncomingRequestCfProperties }).cf,
+    };
 
     const serverMode = env.ENVIRONMENT === "development" ? "development" : "production";
     return createRequestHandler(buildImport, serverMode)(

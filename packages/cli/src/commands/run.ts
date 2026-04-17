@@ -5,6 +5,7 @@ import chalk from "chalk";
 import { getGlobalConfig, getRepoConfig } from "../config.js";
 import { runDeterministicChecks } from "../checks.js";
 import { buildUsageIngestPayloads, ingestUsageEvent } from "../cloud/usage-ingest.js";
+import { runLlmCheckPhase } from "../llm/run-review.js";
 import { writeReport } from "../reporter.js";
 import { Storage, type TokenUsage } from "../storage.js";
 import type { CheckResult, RunSummary } from "../types.js";
@@ -12,6 +13,8 @@ import type { CheckResult, RunSummary } from "../types.js";
 export interface RunOptions {
   trigger?: "manual" | "watch" | "ci";
   checkTypes?: string[];
+  /** When set, overrides repo `llmChecks` for this invocation. */
+  llmCli?: { llm?: boolean; noLlm?: boolean };
 }
 
 interface CheckUsageMetric {
@@ -102,6 +105,28 @@ function usageKeyFromStorageRow(row: TokenUsage): string {
   return `${provider}/${model}`;
 }
 
+function mergeCheckDetailsForStorage(check: CheckResult): Record<string, unknown> | undefined {
+  const raw = check.details;
+  const base =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {};
+  if (check.execution) {
+    base.execution = check.execution;
+  }
+  return Object.keys(base).length > 0 ? base : undefined;
+}
+
+function resolveLlmEnabled(llmCli: RunOptions["llmCli"], repoLlmChecks: boolean): boolean {
+  if (llmCli?.noLlm) {
+    return false;
+  }
+  if (llmCli?.llm) {
+    return true;
+  }
+  return repoLlmChecks;
+}
+
 export async function runCommand(options: RunOptions = {}): Promise<void> {
   const started = performance.now();
   const repoPath = process.cwd();
@@ -114,6 +139,7 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
   const repoConfig = getRepoConfig(repoPath);
   const trigger = options.trigger ?? "manual";
   const effectiveCheckTypes = options.checkTypes ?? repoConfig.checkTypes;
+  const llmEnabled = resolveLlmEnabled(options.llmCli, repoConfig.llmChecks);
 
   const storage = new Storage();
   let checks: CheckResult[] | undefined;
@@ -136,12 +162,48 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
     if (options.checkTypes) {
       console.log(chalk.dim(`Check scope: ${effectiveCheckTypes.join(", ")}`));
     }
+    if (llmEnabled) {
+      console.log(chalk.dim("LLM review phase enabled after deterministic checks."));
+    }
 
     checks = await runDeterministicChecks({
       targetUrl: repoConfig.url,
       checkTypes: effectiveCheckTypes,
       repoPath,
     });
+
+    if (llmEnabled) {
+      if (!globalConfig) {
+        checks = [
+          ...checks,
+          {
+            name: "LLM review",
+            type: "llm-review",
+            execution: "llm",
+            status: "error",
+            durationMs: 0,
+            issues: [
+              {
+                title: "LLM review unavailable",
+                message:
+                  "Global Preships config is missing or invalid. Fix ~/.preships/config.toml or run `preships init`.",
+                target: repoConfig.url,
+                severity: "high",
+              },
+            ],
+          },
+        ];
+      } else {
+        const llmResults = await runLlmCheckPhase({
+          runId,
+          targetUrl: repoConfig.url,
+          globalConfig,
+          deterministicChecks: checks,
+          storage,
+        });
+        checks = [...checks, ...llmResults];
+      }
+    }
 
     let checksPassed = 0;
     let checksFailed = 0;
@@ -159,7 +221,7 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
         target: repoConfig.url,
         status: check.status,
         message: check.issues[0]?.message ?? `${check.name} finished`,
-        details: check.details,
+        details: mergeCheckDetailsForStorage(check),
         modelUsed: usage.modelId,
         tokensUsed: usage.tokenCount,
         costCents: usage.costCents,

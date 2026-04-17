@@ -1,5 +1,7 @@
 import { performance } from "node:perf_hooks";
 
+import { runAxeAccessibilityCheck } from "./audits/accessibility-audit.js";
+import { runLighthouseCheck } from "./audits/lighthouse-audit.js";
 import { runBrowserAutomationFlow, type BrowserAutomationRunResult } from "./browser/automation.js";
 import {
   normalizeCheckTypes,
@@ -12,16 +14,6 @@ export interface RunChecksInput {
   targetUrl: string;
   checkTypes: string[];
   repoPath: string;
-}
-
-function okResult(type: string, name: string, durationMs: number): CheckResult {
-  return {
-    name,
-    type,
-    status: "passed",
-    durationMs,
-    issues: [],
-  };
 }
 
 function validateTargetUrl(targetUrl: string): string | null {
@@ -100,14 +92,10 @@ export async function runDeterministicChecks(input: RunChecksInput): Promise<Che
 
     switch (type) {
       case "lighthouse":
-        results.push(
-          okResult(type, "Lighthouse Audit", toStableDurationMs(start, performance.now())),
-        );
+        results.push(await runLighthouseCheck(input.targetUrl));
         break;
       case "accessibility":
-        results.push(
-          okResult(type, "Accessibility Audit", toStableDurationMs(start, performance.now())),
-        );
+        results.push(await runAxeAccessibilityCheck(input.targetUrl));
         break;
       case "styles":
         results.push(

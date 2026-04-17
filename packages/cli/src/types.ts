@@ -13,6 +13,8 @@ export interface CheckResult {
   status: CheckStatus;
   durationMs: number;
   issues: CheckIssue[];
+  /** When omitted, deterministic tooling produced this check. */
+  execution?: "deterministic" | "llm";
   details?: Record<string, unknown>;
 }
 
